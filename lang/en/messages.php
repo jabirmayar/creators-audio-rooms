@@ -98,7 +98,7 @@ return [
         'everyone_hint' => 'Anyone who can see audio rooms',
         'audience_search' => 'Search',
         'audience_selected' => ':count selected',
-        'no_audiences' => 'You have no classes or groups to start a room for.',
+        'no_audiences' => 'There is no audience you can start a room for yet.',
         'for_audience' => 'For :names',
         'live_now' => 'Live now',
         'listen' => 'Listen',

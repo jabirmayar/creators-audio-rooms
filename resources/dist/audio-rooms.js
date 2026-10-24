@@ -18,7 +18,9 @@
         star: svg('<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>'),
         users: svg('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20.5a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.6a6.5 6.5 0 0 1 3.5 5.9"/>'),
         clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/>'),
-        mail: svg('<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3.5 7.5l8.5 6 8.5-6"/>'),
+        // A microphone broadcasting: "you are invited to the mic".
+        invite: svg('<rect x="10" y="3.5" width="4" height="9" rx="2"/><path d="M8.5 10.5a3.5 3.5 0 0 0 7 0M12 14v4.5M9.8 18.5h4.4"/><path class="car-wave car-wave--1" d="M6.6 7a6.5 6.5 0 0 0 0 7.5M17.4 7a6.5 6.5 0 0 1 0 7.5"/><path class="car-wave car-wave--2" d="M3.9 4.5a10.5 10.5 0 0 0 0 12.5M20.1 4.5a10.5 10.5 0 0 1 0 12.5"/>'),
+        lock: svg('<rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>'),
         sparkle: svg('<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>'),
         check: svg('<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/>'),
         info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5h.01"/>'),
@@ -1026,6 +1028,12 @@
         async onClick(e) {
             if (this.audioBlocked || (this.audioContext && this.audioContext.state !== 'running')) this.unlockAudio();
             if (this.dialog && e.target.hasAttribute && e.target.hasAttribute('data-dialog-backdrop')) { this.closeDialog(false); return; }
+            // A click anywhere outside the open member menu closes it (its own toggle button handles itself).
+            if (this.openMenu && !e.target.closest('.car-menu') && !e.target.closest('[data-action="menu"]')) {
+                this.openMenu = null;
+                this.render();
+                if (!e.target.isConnected) return;
+            }
             const button = e.target.closest('[data-action]');
             if (!button || !this.el.contains(button)) return;
             const action = button.getAttribute('data-action');
@@ -1211,7 +1219,7 @@
                 meta.push('<span class="car-meta-item">' + ICONS.clock + '<span data-live-for="' + esc(room.started_at || '') + '">' + esc(liveFor(room.started_at, this.t)) + '</span></span>');
                 meta.push('<span class="car-meta-item">' + ICONS.users + esc(this.tr('people_count', { count: s.counts.people })) + '</span>');
             }
-            if (room.audience_label) meta.push('<span>' + esc(room.audience_label) + '</span>');
+            if (room.audience_label) meta.push('<span class="car-meta-item">' + ICONS.lock + esc(this.tr('for_audience', { names: room.audience_label })) + '</span>');
 
             const audio = Array.from(this.el.querySelectorAll('audio'));
             // The same live-region node is kept, so screen readers neither miss nor repeat announcements.
@@ -1303,7 +1311,7 @@
             if (!this.joined || !me || !me.invited || me.role !== 'listener') return '';
             const id = this.uid + '-invite';
             return '<div class="car-invite" role="group" aria-labelledby="' + id + '">' +
-                '<span class="car-invite-icon">' + ICONS.mail + '</span><div class="car-invite-text"><p class="car-invite-title" id="' + id + '">' + esc(this.tr('invitation_title')) + '</p>' +
+                '<span class="car-invite-icon">' + ICONS.invite + '</span><div class="car-invite-text"><p class="car-invite-title" id="' + id + '">' + esc(this.tr('invitation_title')) + '</p>' +
                 '<p class="car-invite-body">' + esc(this.tr('invitation_body')) + '</p></div>' +
                 '<div class="car-invite-actions">' +
                     '<button type="button" class="car-btn car-btn--small" data-action="invite-decline">' + esc(this.tr('not_now')) + '</button>' +
@@ -1363,7 +1371,7 @@
                 badges.push(SPEAKING_BARS);
             }
             if (m.hand_raised) badges.push('<span class="car-icon-badge car-icon-badge--hand" title="' + esc(this.tr('hand_raised')) + '">' + ICONS.hand + '</span>');
-            else if (m.invited) badges.push('<span class="car-icon-badge car-icon-badge--invite" title="' + esc(this.tr('invited_badge')) + '">' + ICONS.mail + '</span>');
+            else if (m.invited) badges.push('<span class="car-icon-badge car-icon-badge--invite" title="' + esc(this.tr('invited_badge')) + '">' + ICONS.invite + '</span>');
 
             const canAct = s.can.moderate && !isMe && m.role !== 'monitor' && !(m.role === 'host' && !['host', 'monitor'].includes(me.role));
             const states = [m.hand_raised ? this.tr('hand_raised') : (m.invited ? this.tr('invited_badge') : '')].filter(Boolean);
@@ -1503,6 +1511,26 @@
 
     function mountCreateForm(form) {
         mountAudiencePicker(form);
+        // The "Start a room" panel closes on an outside click or Escape, like a menu.
+        const panel = form.closest('details');
+        if (panel) {
+            document.addEventListener('click', (e) => {
+                if (panel.open && e.target.isConnected && !panel.contains(e.target)) panel.open = false;
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && panel.open) { panel.open = false; panel.querySelector('summary').focus({ preventScroll: true }); }
+            });
+            // As a popover, keep it inside the window (scrolling within itself), so opening it never adds a
+            // page scrollbar that would shift the whole page sideways.
+            const fit = () => {
+                form.style.maxHeight = '';
+                if (!panel.open || window.getComputedStyle(form).position !== 'absolute') return;
+                const room = window.innerHeight - form.getBoundingClientRect().top - 16;
+                form.style.maxHeight = Math.max(220, Math.floor(room)) + 'px';
+            };
+            panel.addEventListener('toggle', fit);
+            window.addEventListener('resize', fit);
+        }
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const error = form.querySelector('[data-error]');
@@ -1556,7 +1584,7 @@
                 '<div class="car-card-top">' + top.join('') + '</div>' +
                 '<h3 class="car-card-title">' + (href ? '<a class="car-card-link" href="' + esc(href) + '">' + esc(room.title) + '</a>' : esc(room.title)) + '</h3>' +
                 (room.description ? '<p class="car-card-description">' + esc(room.description) + '</p>' : '') +
-                (room.audience_label ? '<p class="car-card-audience">' + esc(room.audience_label) + '</p>' : '') +
+                (room.audience_label ? '<p class="car-card-audience">' + ICONS.lock + '<span>' + esc(fill(t.for_audience || ':names', { names: room.audience_label })) + '</span></p>' : '') +
                 host +
                 '<div class="car-card-foot">' + stack + people +
                     (href ? '<a class="car-btn car-btn--small' + (live ? ' car-btn--primary' : '') + '" href="' + esc(href) + '" tabindex="-1" aria-hidden="true">' + esc(action) + '</a>' : '') +

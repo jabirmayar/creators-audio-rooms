@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * One audience a room is for (a class, a group, a team…).
+ * One audience a room is for (a team, a group, a community…).
  *
  * @property int $id
  * @property string $room_id

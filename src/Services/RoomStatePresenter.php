@@ -37,7 +37,7 @@ class RoomStatePresenter
             'title' => $room->title,
             'description' => $room->description,
             'status' => $room->status->value,
-            // Chosen audiences (classes, groups…) win over the resolver's single label.
+            // Chosen audiences (teams, groups…) win over the resolver's single label.
             'audience_label' => $labels->isNotEmpty() ? $labels->implode(', ') : $this->audience->label($room),
             'audiences' => $audiences->map(fn ($a) => ['type' => $a->audience_type, 'ref' => $a->audience_ref, 'label' => $a->label])->values()->all(),
             'started_at' => $room->started_at?->toIso8601String(),

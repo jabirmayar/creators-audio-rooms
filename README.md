@@ -357,7 +357,7 @@ class Audiences implements AudienceResolver
 
 #### Letting hosts choose who can join
 
-Implement `ProvidesAudienceOptions` on the same class and the start-room form gets a **Who can join** picker. Hosts pick one or more audiences (classes, groups, teams…); the room is then visible to, and joinable by, only people in at least one of them, plus its hosts and any monitors. People outside never see it in lists or the "Live now" widget.
+Implement `ProvidesAudienceOptions` on the same class and the start-room form gets a **Who can join** picker. Hosts pick one or more audiences (teams, groups, communities…); the room is then visible to, and joinable by, only people in at least one of them, plus its hosts and any monitors. People outside never see it in lists or the "Live now" widget.
 
 ```php
 use daacreators\CreatorsAudioRooms\Contracts\ProvidesAudienceOptions;

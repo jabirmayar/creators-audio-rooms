@@ -69,7 +69,7 @@
             'api' => route($routes.'api.index'),
             'rooms' => $rooms->map(fn ($room) => $room + ['url' => route($routes.'show', $room['id'])])->values(),
             'labels' => collect(['live', 'scheduled', 'people_count', 'yours', 'no_rooms', 'no_rooms_hint', 'hosted_by', 'live_for',
-                'started_just_now', 'duration_minutes', 'duration_hours', 'join_short', 'open_room', 'view_room'])
+                'started_just_now', 'duration_minutes', 'duration_hours', 'join_short', 'open_room', 'view_room', 'for_audience'])
                 ->mapWithKeys(fn ($key) => [$key => $ui($key)]),
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) }}" aria-live="polite">
         <noscript>

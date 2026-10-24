@@ -7,7 +7,7 @@ use daacreators\CreatorsAudioRooms\Support\ParticipantIdentity;
 
 /**
  * Optional companion to AudienceResolver: lets hosts choose who a room is for
- * when they start it (one or more classes, groups, teams…).
+ * when they start it (one or more teams, groups, communities…).
  *
  * When your AudienceResolver also implements this interface, the start-room
  * form shows a "Who can join" picker, the chosen audiences are stored with the

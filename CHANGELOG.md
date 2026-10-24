@@ -2,6 +2,20 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.5.2 - 2026-10-24
+
+### Changed
+
+- New "invited to speak" icon: a microphone broadcasting, with gently pulsing sound waves, on the person's face, the invitation card and the invite action.
+- Rooms for chosen audiences show "For …" with a lock icon in the room header and on room cards.
+- Neutral wording for apps of any kind (e.g. "There is no audience you can start a room for yet.").
+
+### Fixed
+
+- Member menus close when clicking anywhere outside them (not only outside the room), and the "Start a room" panel closes on an outside click or Escape.
+- The join bar puts its explanation on its own line under the buttons.
+- Opening the "Start a room" panel no longer shifts the page: the panel stays within the window and scrolls inside itself.
+
 ## 1.5.1 - 2026-10-24
 
 ### Fixed
@@ -12,7 +26,7 @@ All notable changes to this package are documented here. The format follows [Kee
 
 ### Added
 
-- Rooms for chosen audiences: implement `ProvidesAudienceOptions` (with `AudienceOption`) on your audience resolver to give the start-room form a **Who can join** picker. Hosts pick one or more audiences (classes, groups, teams…); only people in at least one of them, the room's hosts and monitors can see or join the room. Rooms for others never appear in lists or the "Live now" widget.
+- Rooms for chosen audiences: implement `ProvidesAudienceOptions` (with `AudienceOption`) on your audience resolver to give the start-room form a **Who can join** picker. Hosts pick one or more audiences (teams, groups, communities…); only people in at least one of them, the room's hosts and monitors can see or join the room. Rooms for others never appear in lists or the "Live now" widget.
 - "Everyone" (no audience) is only offered to hosts the app allows (`allowsEveryone()`).
 - New table `room_audiences` (run `php artisan migrate`), `GET /api/audiences`, and an `audiences` field on `POST /api/rooms`. Room data includes `audiences` and an `audience_label` built from them.
 

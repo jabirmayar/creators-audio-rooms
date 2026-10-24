@@ -71,7 +71,7 @@ class RoomAccess
     }
 
     /**
-     * Rooms started for specific audiences (classes, groups…) are only for
+     * Rooms started for specific audiences (teams, groups…) are only for
      * people in at least one of them. Monitors oversee every room.
      */
     public function inChosenAudience(ParticipantIdentity $who, Room $room): bool

@@ -5,9 +5,9 @@ namespace daacreators\CreatorsAudioRooms\Support;
 use InvalidArgumentException;
 
 /**
- * Something a host can start a room for, e.g. a class, a group or a team.
+ * Something a host can start a room for, e.g. a team, a group or a community.
  * "type" and "ref" are opaque to the package; "group" only groups the choices
- * in the picker (e.g. "Classes", "Language groups").
+ * in the picker (e.g. "Teams", "Communities").
  */
 final class AudienceOption
 {
