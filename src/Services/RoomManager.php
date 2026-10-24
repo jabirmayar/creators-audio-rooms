@@ -63,7 +63,11 @@ class RoomManager
 
         $this->access->ensureCanCreate($host, $draft);
 
-        $openRooms = Room::query()->open()->where('created_by_key', $host->key)->count();
+        // Counts rooms this person currently hosts, not rooms they once created: after handing a
+        // room to a co-host (leaving makes the co-host the host) they can start another one.
+        $openRooms = Room::query()->open()
+            ->whereHas('members', fn ($q) => $q->where('participant_key', $host->key)->where('role', RoomRole::Host->value))
+            ->count();
         if ($openRooms >= (int) ($limits['max_open_rooms_per_host'] ?? 1)) {
             throw RoomActionDenied::because('too_many_rooms', 409);
         }

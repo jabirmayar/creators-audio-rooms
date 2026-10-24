@@ -72,7 +72,7 @@ Peer-to-peer audio keeps hosting simple but suits **small rooms**.
 | Hosts | 2 | host and co-host |
 | Voices | 6 | speakers, hosts included |
 | Listeners | 30 | |
-| Open rooms per host | 1 | |
+| Open rooms per host | 1 | rooms the person currently hosts; handing a room to a co-host frees them |
 
 Each speaker's audio is capped at 32 kbps per connection (`audio.max_bitrate`), so a speaker in a full room uploads roughly 1.3 Mbps. Raising the limits makes rooms heavier for phones; `php artisan creators-audio-rooms:doctor` warns about heavy settings.
 
@@ -143,6 +143,17 @@ Put a room on any page, for example an event, community or team page:
 `$room` is a `daacreators\CreatorsAudioRooms\Models\Room` or its id. The component loads the stylesheet and script once per page. Embedding never grants access: the API checks every request.
 
 To embed rooms only, turn the ready-made pages off with `'routes' => ['pages' => false]`. The API keeps working.
+
+### "Live now" widget
+
+Show live rooms on a home page or dashboard, the way social apps show live audio at the top of the feed:
+
+```blade
+<x-creators-audio-rooms::live-now />
+<x-creators-audio-rooms::live-now :limit="4" class="mb-6" />
+```
+
+It lists the live rooms the signed-in visitor may join (speaker faces, title, host, people count and a Listen button), refreshes itself, hides when nothing is live, renders nothing for guests, and leaves out the room already open on the page.
 
 ### Creating rooms from your own code
 
@@ -434,7 +445,8 @@ No queue worker is needed.
 
 ## Room rules
 
-- **Starting.** A new room is *not started*. Its hosts can enter and prepare; everyone else can join once a host starts it.
+- **Starting.** **Go live** on the room list creates the room, starts it and puts the creator straight in as host. Rooms created without starting (from code, or the API without `start`) are *not started*: their hosts can enter and prepare, and everyone else can join once a host starts it.
+- **Handing over.** When the host leaves, the longest-present co-host becomes host. A person can host one open room at a time (`max_open_rooms_per_host`); once they hand a room over this way they can start another.
 - **Joining.** Everyone joins as a listener, except people who already hold a role in that room. Rejoining (reload, reconnect, new device) reuses the same membership and keeps the role. The newest tab or device takes over and older ones are told so.
 - **Speaking.** Nobody becomes a speaker without agreeing to it. Listeners raise a hand and a host approves, or a host invites a listener, who then accepts or declines; a host can withdraw an invitation that has not been answered. Microphones always start off, and only the participant can turn theirs on.
 - **Muting.** A host can mute a speaker. That speaker cannot unmute until a host allows it, and even then only the speaker can turn the microphone back on. A microphone is never switched on remotely.

@@ -22,6 +22,7 @@
         check: svg('<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/>'),
         info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5h.01"/>'),
         alert: svg('<path d="M10.3 4.1L2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 4.1a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4M12 17h.01"/>'),
+        end: svg('<rect x="4.5" y="4.5" width="15" height="15" rx="3"/>'),
         leave: svg('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'),
         play: svg('<path d="M8 5v14l11-7z"/>', 'currentColor'),
         eye: svg('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
@@ -224,8 +225,23 @@
                 this.notice = { kind: 'error', text: e.message || this.tr('error_generic') };
             }
             this.render();
+            if (this.takeEnterFlag()) return;
             // Rooms that have not started yet are re-checked so listeners can join once live.
             this.scheduleLobbyRefresh();
+        }
+
+        /** The host just started this room: go straight in instead of showing "Enter as host". */
+        takeEnterFlag() {
+            let params;
+            try { params = new URLSearchParams(window.location.search); } catch (e) { return false; }
+            if (params.get('enter') !== '1') return false;
+            params.delete('enter');
+            const query = params.toString();
+            try { window.history.replaceState(null, '', window.location.pathname + (query ? '?' + query : '') + window.location.hash); } catch (e) { /* keep the URL */ }
+            const me = this.state && this.state.me;
+            if (!me || !['host', 'co_host'].includes(me.role) || this.state.room.status === 'ended' || !window.RTCPeerConnection) return false;
+            this.join(false);
+            return true;
         }
 
         scheduleLobbyRefresh() {
@@ -1207,6 +1223,7 @@
             const rect = menu.getBoundingClientRect();
             const rtl = window.getComputedStyle(this.el).direction === 'rtl';
             if (rtl ? rect.left < 8 : rect.right > window.innerWidth - 8) menu.classList.add('car-menu--flip');
+            if (rect.bottom > window.innerHeight - 8 && rect.height < menu.parentElement.getBoundingClientRect().top - 8) menu.classList.add('car-menu--up');
             if (this.menuJustOpened) {
                 // Focus the first item only when the menu opens, not on every refresh.
                 this.menuJustOpened = false;
@@ -1419,7 +1436,7 @@
             }
 
             out.push('<span class="car-controls-spacer"></span>');
-            if (s.can.end) out.push('<button type="button" class="car-btn car-btn--danger car-btn--small" data-action="end">' + esc(this.tr('end')) + '</button>');
+            if (s.can.end) out.push('<button type="button" class="car-btn car-btn--danger" data-action="end" aria-label="' + esc(this.tr('end')) + '">' + ICONS.end + '<span class="car-btn-label--hide-sm">' + esc(this.tr('end')) + '</span></button>');
             out.push('<button type="button" class="car-btn" data-action="leave">' + ICONS.leave + '<span class="car-btn-label--hide-sm">' + esc(this.tr('leave')) + '</span></button>');
             return '<div class="car-controls" role="toolbar" aria-label="' + esc(this.tr('rooms')) + '">' + out.join('') + '</div>';
         }
@@ -1439,8 +1456,9 @@
                 const data = await api.request('POST', '', {
                     title: form.elements.title.value,
                     description: form.elements.description ? form.elements.description.value : null,
+                    start: true,
                 });
-                window.location.href = data.url;
+                if (data.url) window.location.href = data.url + (data.url.indexOf('?') === -1 ? '?' : '&') + 'enter=1';
             } catch (err) {
                 const errors = err.body && err.body.errors;
                 if (error) error.textContent = errors ? Object.values(errors).flat()[0] : err.message;
@@ -1507,6 +1525,49 @@
         document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
     }
 
+    // ─── "Live now" strip (home pages, dashboards) ──────────────────────────
+
+    function mountLiveNow(el) {
+        let config;
+        try { config = JSON.parse(el.getAttribute('data-audio-rooms-live')); } catch (e) { return; }
+        const t = config.labels || {};
+        const api = new Api(config.api, null);
+        let last = null;
+
+        const item = (room) => {
+            const href = safeUrl(room.url);
+            const faces = (room.stage || []).slice(0, 3);
+            const sub = [room.host ? fill(t.hosted_by, { name: room.host.name }) : '', fill(t.people_count, { count: room.people })].filter(Boolean).join(' · ');
+            const tag = href ? 'a' : 'div';
+            return '<' + tag + (href ? ' href="' + esc(href) + '"' : '') + ' class="car-live-item">' +
+                (faces.length ? '<span class="car-stack" aria-hidden="true">' + faces.map((p) => avatarHtml(p, 'sm')).join('') + '</span>' : '') +
+                '<span class="car-live-text"><span class="car-live-title">' + esc(room.title) + '</span><span class="car-live-sub">' + esc(sub) + '</span></span>' +
+                '<span class="car-btn car-btn--small car-btn--primary" aria-hidden="true">' + ICONS.headphones + esc(t.listen) + '</span>' +
+                '</' + tag + '>';
+        };
+
+        const render = (rooms) => {
+            // The room already open on this page is not advertised again.
+            const here = window.location.pathname.replace(/\/$/, '');
+            const live = rooms.filter((r) => r.status === 'live' && !(r.url && safeUrl(r.url) && new URL(r.url, window.location.href).pathname.replace(/\/$/, '') === here)).slice(0, config.limit || 8);
+            const html = live.length
+                ? '<div class="car-live-strip"><span class="car-live-label"><i></i>' + esc(t.live_now) + '</span><div class="car-live-items">' + live.map(item).join('') + '</div></div>'
+                : '';
+            if (html === last) return;
+            last = html;
+            el.innerHTML = html;
+            el.hidden = !live.length;
+        };
+
+        render(config.rooms || []);
+        const refresh = async () => {
+            if (document.hidden) return;
+            try { render((await api.request('GET', '')).rooms || []); } catch (e) { /* keep what is shown */ }
+        };
+        setInterval(refresh, 20000);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+    }
+
     function mountAll() {
         document.querySelectorAll('[data-audio-room]:not([data-car-mounted])').forEach((el) => {
             el.setAttribute('data-car-mounted', '');
@@ -1519,6 +1580,10 @@
         document.querySelectorAll('[data-audio-rooms-create]:not([data-car-mounted])').forEach((form) => {
             form.setAttribute('data-car-mounted', '');
             mountCreateForm(form);
+        });
+        document.querySelectorAll('[data-audio-rooms-live]:not([data-car-mounted])').forEach((strip) => {
+            strip.setAttribute('data-car-mounted', '');
+            mountLiveNow(strip);
         });
         document.querySelectorAll('[data-audio-rooms-list]:not([data-car-mounted])').forEach((list) => {
             list.setAttribute('data-car-mounted', '');

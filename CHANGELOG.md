@@ -2,6 +2,19 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.4.0 - 2026-10-24
+
+### Added
+
+- `<x-creators-audio-rooms::live-now />`: a "Live now" strip of joinable live rooms for home pages and dashboards; hides when nothing is live.
+- `POST /api/rooms` accepts `start: true` to create a room that is already live.
+
+### Changed
+
+- **Go live** (the room list form) creates and starts the room and puts the creator straight in as host, instead of showing "Enter as host" and "Start room".
+- The open-room limit counts rooms the person currently hosts, so handing a room to a co-host (by leaving) frees them to start another.
+- Phones: the create form opens in place, request rows wrap instead of truncating names, the control bar stays on one line (End and Leave as icons), and member menus open upward near the bottom of the screen.
+
 ## 1.3.0 - 2026-10-24
 
 ### Added

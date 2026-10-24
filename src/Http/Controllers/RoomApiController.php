@@ -54,9 +54,15 @@ class RoomApiController extends Controller
         $data = $request->validate([
             'title' => ['required', 'string', 'max:160'],
             'description' => ['nullable', 'string', 'max:2000'],
+            // Go live right away instead of creating a not-started room.
+            'start' => ['sometimes', 'boolean'],
         ]);
 
-        $room = $this->rooms->create($this->who($request), $data);
+        $who = $this->who($request);
+        $room = $this->rooms->create($who, $data);
+        if ($request->boolean('start')) {
+            $room = $this->rooms->start($who, $room);
+        }
         $page = config('creators-audio-rooms.routes.name').'show';
 
         return response()->json([
