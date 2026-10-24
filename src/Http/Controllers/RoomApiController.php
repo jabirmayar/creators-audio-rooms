@@ -161,12 +161,26 @@ class RoomApiController extends Controller
             $response['state'] = $this->presenter->forViewer($room, $who);
         }
         if ($token->expiresWithin(120)) {
-            $fresh = SessionToken::issue($room->id, $who->key, (string) $member->connection_id);
-            $response['session'] = $fresh->encode();
-            $response['session_expires_at'] = $fresh->expiresAt;
+            // Renewal goes through GET /session, which also confirms the person is still signed in.
+            $response['renew_session'] = true;
         }
 
         return response()->json($response);
+    }
+
+    /** A fresh room session token for the current connection; requires the app sign-in. */
+    public function renewSession(Request $request, string $room): JsonResponse
+    {
+        $who = $this->who($request);
+        $room = $this->viewable($who, $room);
+        [$member] = $this->rooms->memberForToken($who, $room, $request->header(self::TOKEN_HEADER));
+
+        $fresh = SessionToken::issue($room->id, $who->key, (string) $member->connection_id);
+
+        return response()->json([
+            'session' => $fresh->encode(),
+            'session_expires_at' => $fresh->expiresAt,
+        ]);
     }
 
     public function signal(Request $request, string $room): JsonResponse

@@ -2,6 +2,18 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.1.0 - 2026-10-24
+
+### Changed
+
+- Check-in (`sync`) and connection-message (`signal`) requests are authenticated by the signed room session token alone and no longer start or write the app session. This removes lost-session races (people being signed out, "CSRF token mismatch") with session drivers that have no locking, such as `file` and `cookie`, and makes check-ins cheaper.
+- Room session tokens are renewed through the new `GET /api/rooms/{room}/session` endpoint, which uses the app session, so signing out of the app still disconnects the person from the room.
+- Room lists and the room header show how many people are in the room (`:count in the room`); the list API returns `people` alongside `listeners`, and people who closed the page without leaving are no longer counted once they time out.
+
+### Added
+
+- `routes.signaling_middleware` config option for middleware on the sync and signal routes.
+
 ## 1.0.0 - 2026-10-24
 
 First public release. Supports Laravel 12 (PHP 8.2+) and Laravel 13 (PHP 8.3+).

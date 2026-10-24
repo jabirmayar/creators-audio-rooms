@@ -164,6 +164,9 @@ return [
         'prefix' => 'audio-rooms',
         'name' => 'audio-rooms.',
         'middleware' => ['web'],
+        // Sync and signal requests (every second or two per participant) are authenticated by the signed
+        // room session token and skip the app session and cookies. Add middleware here if they need any.
+        'signaling_middleware' => [],
         // Where signed-out visitors are sent from the pages (route name), if it exists.
         'login_route' => 'login',
     ],

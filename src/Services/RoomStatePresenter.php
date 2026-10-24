@@ -54,19 +54,31 @@ class RoomStatePresenter
      */
     public function directory(ParticipantIdentity $who, int $limit = 50): array
     {
-        return $this->access->discoverableRooms($who)
-            ->withCount('activeMembers')
+        $rooms = $this->access->discoverableRooms($who)
             ->orderByRaw("case when status = 'live' then 0 else 1 end")
             ->latest()
             ->limit($limit)
             ->get()
             ->filter(fn (Room $room) => $this->access->canView($who, $room))
-            ->map(fn (Room $room) => $this->summary($room) + [
-                'listeners' => (int) $room->active_members_count,
-                'is_mine' => $room->created_by_key === $who->key,
-            ])
-            ->values()
-            ->all();
+            ->values();
+
+        // People who closed the page without leaving are only counted until they time out.
+        $rooms->filter(fn (Room $room) => $room->isLive())->each(fn (Room $room) => $this->manager()->tidy($room));
+        $rooms->loadCount([
+            'activeMembers as people_count',
+            'activeMembers as listeners_count' => fn ($q) => $q->where('role', RoomRole::Listener->value),
+        ]);
+
+        return $rooms->map(fn (Room $room) => $this->summary($room) + [
+            'people' => (int) $room->people_count,
+            'listeners' => (int) $room->listeners_count,
+            'is_mine' => $room->created_by_key === $who->key,
+        ])->all();
+    }
+
+    private function manager(): RoomManager
+    {
+        return app(RoomManager::class);
     }
 
     /** @return array<string, mixed> */
@@ -110,6 +122,7 @@ class RoomStatePresenter
                 'voices' => count($byRole(RoomRole::Host, RoomRole::CoHost, RoomRole::Speaker)),
                 'listeners' => count($byRole(RoomRole::Listener)),
                 'requests' => count($requests),
+                'people' => $public->count(),
             ],
             'me' => $me ? [
                 'key' => $me->participant_key,

@@ -282,6 +282,12 @@ class RoomManager
      * Mark members whose browsers stopped checking in as disconnected, hand
      * the host role on if needed, and end rooms left without any host.
      */
+    /** Reconcile at most every few seconds per room (cheap enough to call from lists and syncs). */
+    public function tidy(Room $room): void
+    {
+        $this->signals->throttle('reconcile:'.$room->id, 5, fn () => $this->reconcile($room));
+    }
+
     public function reconcile(Room $room): void
     {
         $room->refresh();

@@ -4,8 +4,8 @@ namespace daacreators\CreatorsAudioRooms\Signaling;
 
 /**
  * A short-lived, signed token issued after a successful join. It binds one
- * browser connection to one room and one participant, and is required (in
- * addition to the normal app session) on every sync and signal request.
+ * browser connection to one room and one participant. Sync and signal
+ * requests are authenticated by it alone; renewing it requires the app session.
  *
  * A newer join replaces the connection id, so an older tab stops working
  * instead of creating a duplicate participant.

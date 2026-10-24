@@ -281,8 +281,8 @@
                 const data = await this.api.request('GET', '/sync?since=' + this.cursor + '&v=' + this.version + (document.hidden ? '&hidden=1' : ''));
                 this.failures = 0;
                 if (this.status !== 'connected') this.setStatus('connected');
-                if (data.session) this.api.session = data.session;
                 this.cursor = data.cursor;
+                if (data.renew_session) this.renewSession();
                 if (data.state) {
                     this.touchActivity();
                     this.setState(data.state);
@@ -298,6 +298,20 @@
             } finally {
                 this.syncing = false;
                 this.scheduleSync();
+            }
+        }
+
+        /** Renew the room session token; this request also confirms the person is still signed in. */
+        async renewSession() {
+            if (this.renewing) return;
+            this.renewing = true;
+            try {
+                const data = await this.api.request('GET', '/session');
+                if (data && data.session) this.api.session = data.session;
+            } catch (e) {
+                if (e instanceof ApiError) this.handleError(e);
+            } finally {
+                this.renewing = false;
             }
         }
 
@@ -1094,7 +1108,7 @@
 
             const meta = [];
             if (room.audience_label) meta.push(esc(room.audience_label));
-            if (room.status === 'live') meta.push(esc(this.tr('listener_count', { count: s.counts.listeners })));
+            if (room.status === 'live') meta.push(esc(this.tr('people_count', { count: s.counts.people })));
 
             const audio = Array.from(this.el.querySelectorAll('audio'));
             // The same live-region node is kept, so screen readers neither miss nor repeat announcements.
@@ -1358,7 +1372,7 @@
         const item = (room) => {
             const meta = [];
             if (room.audience_label) meta.push(esc(room.audience_label));
-            if (room.status === 'live') meta.push(esc(String(t.listener_count || ':count').split(':count').join(room.listeners)));
+            if (room.status === 'live') meta.push(esc(String(t.people_count || ':count').split(':count').join(room.people)));
             if (room.is_mine) meta.push(esc(t.yours));
             const href = safeUrl(room.url);
             return '<' + (href ? 'a href="' + esc(href) + '"' : 'div') + ' class="car-list-item"><div class="car-list-item-main">' +

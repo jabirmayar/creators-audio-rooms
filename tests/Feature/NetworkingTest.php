@@ -85,7 +85,8 @@ class NetworkingTest extends ApiTestCase
         $rooms = $this->getJson('/audio-rooms/api/rooms')->assertOk()->json('rooms');
 
         $this->assertSame(['Weekly sync'], array_column($rooms, 'title'));
-        $this->assertSame(2, $rooms[0]['listeners']);
+        $this->assertSame(2, $rooms[0]['people']);
+        $this->assertSame(1, $rooms[0]['listeners']);
         $this->assertStringEndsWith('/audio-rooms/'.$roomId, $rooms[0]['url']);
     }
 

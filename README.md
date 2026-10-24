@@ -162,7 +162,9 @@ Static TURN credentials can still be listed in `ice_servers` if your provider is
 
 ### Request load
 
-Each participant's browser checks in about every 1.2 seconds while something is happening, every 2.5 seconds when the room is quiet and every 5 seconds when the tab is hidden. A full room (36 people) therefore makes roughly 15–30 small requests per second to your app. Each check-in reads a few cache keys and only queries the database when the room changed.
+Each participant's browser checks in about every 1.2 seconds while something is happening, every 2.5 seconds when the room is quiet and every 5 seconds when the tab is hidden. A full room (36 people) therefore makes roughly 15–30 small requests per second to your app. Check-ins do not start or write your app's session; each one reads a few cache keys and runs a couple of small queries, and only builds the full room state when something changed.
+
+Middleware for these requests can be added with `routes.signaling_middleware` (empty by default); the rest of the routes use `routes.middleware`.
 
 - Use **Redis or Memcached** as the cache (`signaling.cache_store`); the `database` and `file` stores work but add load.
 - Run PHP with enough workers for the expected number of concurrent participants (PHP-FPM, Octane or FrankenPHP).
@@ -409,7 +411,8 @@ No queue worker is needed.
 ## Security and privacy
 
 - Every endpoint resolves the participant and re-checks permissions, tenant, audience, bans and room role.
-- After joining, each browser gets a **short-lived signed session token** (5 minutes, renewed automatically) bound to one room, one participant and one connection.
+- After joining, each browser gets a **short-lived signed session token** (5 minutes) bound to one room, one participant and one connection.
+- The frequent check-in and connection-message requests are authenticated by that token alone. They skip your app's session, cookies and CSRF check, so they never rewrite the session (which avoids lost-session races with the `file` and `cookie` drivers) and stay cheap. Renewing the token every few minutes goes through your normal session, so someone who signs out of your app is disconnected from the room within minutes, and immediately on their next room action.
 - Connection messages are only relayed between active members of the same room. Listeners can never start a connection or send audio: the server rejects it, and receiving browsers silence anyone who is not allowed to speak.
 - Room data shown to browsers contains display names, avatars and participant keys only.
 - Requests are rate limited per participant (`rate_limits` config).

@@ -62,7 +62,7 @@ return [
         'speaking' => 'Speaking',
         'nobody_here' => 'Nobody here yet.',
         'empty_listeners' => 'No listeners yet.',
-        'listener_count' => ':count listening',
+        'people_count' => ':count in the room',
         'create_title' => 'Start a room',
         'title_label' => 'Title',
         'description_label' => 'Description (optional)',

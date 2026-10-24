@@ -31,7 +31,8 @@ use Illuminate\Support\Carbon;
  * @property int $version
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
- * @property-read int $active_members_count
+ * @property-read int $people_count
+ * @property-read int $listeners_count
  */
 class Room extends Model
 {

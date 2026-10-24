@@ -33,7 +33,7 @@
             'labels' => [
                 'live' => $ui('live'),
                 'scheduled' => $ui('scheduled'),
-                'listener_count' => $ui('listener_count'),
+                'people_count' => $ui('people_count'),
                 'yours' => $ui('yours'),
                 'no_rooms' => $ui('no_rooms'),
             ],
@@ -48,7 +48,7 @@
                             <div class="car-list-item-title">{{ $room['title'] }}</div>
                             <div class="car-meta">
                                 @if($room['audience_label'])<span>{{ $room['audience_label'] }}</span>@endif
-                                @if($room['status'] === 'live')<span>{{ $ui('listener_count', ['count' => $room['listeners']]) }}</span>@endif
+                                @if($room['status'] === 'live')<span>{{ $ui('people_count', ['count' => $room['people']]) }}</span>@endif
                                 @if($room['is_mine'])<span>{{ $ui('yours') }}</span>@endif
                             </div>
                         </div>
