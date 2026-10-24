@@ -1,5 +1,12 @@
 # Creators Audio Rooms
 
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/daacreators/creators-audio-rooms.svg)](https://packagist.org/packages/daacreators/creators-audio-rooms)
+[![Total Downloads](https://img.shields.io/packagist/dt/daacreators/creators-audio-rooms.svg)](https://packagist.org/packages/daacreators/creators-audio-rooms)
+[![Tests](https://img.shields.io/github/actions/workflow/status/jabirmayar/creators-audio-rooms/tests.yml?branch=main&label=tests)](https://github.com/jabirmayar/creators-audio-rooms/actions/workflows/tests.yml)
+[![PHP Version](https://img.shields.io/packagist/dependency-v/daacreators/creators-audio-rooms/php.svg)](https://packagist.org/packages/daacreators/creators-audio-rooms)
+[![Laravel](https://img.shields.io/badge/laravel-12%20%7C%2013-red.svg)](https://laravel.com)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Live audio rooms for Laravel, in the style of X/Twitter Spaces: hosts, speakers and listeners, hand raising and moderation.
 
 - **Nothing extra to host.** Audio travels directly between browsers (peer-to-peer WebRTC). Room updates and connection setup go through ordinary requests to your own Laravel app. No media server, WebSocket server or queue worker is required.
