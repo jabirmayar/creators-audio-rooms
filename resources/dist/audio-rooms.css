@@ -151,7 +151,7 @@
 /* Invitation to speak */
 .car-invite { margin: 12px 20px 0; padding: 14px; border-radius: 12px; border: 1px solid var(--car-accent); background: var(--car-accent-soft); display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
 .car-invite-text { flex: 1 1 220px; min-width: 0; }
-.car-invite-icon { flex: 0 0 auto; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: var(--car-accent); color: var(--car-accent-contrast); animation: car-ring-accent 2s ease-out infinite; }
+.car-invite-icon { flex: 0 0 auto; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: var(--car-accent); color: var(--car-accent-contrast); }
 .car-invite-icon svg { width: 20px; height: 20px; }
 .car-invite-title { margin: 0; font-weight: 700; font-size: .95rem; }
 .car-invite-body { margin: 2px 0 0; color: var(--car-muted); font-size: .85rem; line-height: 1.45; }
@@ -221,7 +221,6 @@ a.car-person-name:hover { text-decoration: underline; }
 .car-icon-badge--hand { background: #f59e0b; }
 .car-icon-badge--hand svg { transform-origin: 60% 85%; animation: car-wave 2.4s ease-in-out infinite; }
 .car-icon-badge--invite { background: var(--car-accent); }
-.car-icon-badge--invite::after { content: ""; position: absolute; inset: -2px; border-radius: 50%; animation: car-ring 1.8s ease-out infinite; }
 /* Talking bars: present on every unmuted speaker, visible while they speak. */
 .car-icon-badge--speaking { display: none; grid-auto-flow: column; gap: 2px; place-content: center; background: var(--car-accent); }
 .car-icon-badge--speaking i { display: block; width: 3px; height: 11px; border-radius: 2px; background: #fff; transform-origin: 50% 100%; animation: car-bars .9s ease-in-out infinite; }
@@ -275,6 +274,7 @@ a.car-person-name:hover { text-decoration: underline; }
 .car-dialog-backdrop { position: fixed; inset: 0; z-index: 1000; background: var(--car-backdrop); display: grid; place-items: center; padding: 16px; }
 .car-dialog { width: min(420px, 100%); background: var(--car-bg); color: var(--car-text); border: 1px solid var(--car-border); border-radius: var(--car-radius); box-shadow: var(--car-shadow); padding: 20px; }
 .car-dialog-title { margin: 0; font-size: 1.02rem; font-weight: 700; line-height: 1.4; }
+.car-dialog-body { margin: 6px 0 0; color: var(--car-muted); font-size: .9rem; line-height: 1.5; }
 .car-dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 
 /* Room list page */
@@ -312,18 +312,33 @@ a.car-person-name:hover { text-decoration: underline; }
 .car-stack .car-avatar + .car-avatar { margin-inline-start: -9px; }
 .car-stack-more { margin-inline-start: 6px; font-size: .75rem; font-weight: 700; color: var(--car-muted); }
 
-/* "Live now" strip */
+/* "Live now" strip: a wrapping grid, so it always fits its container (no sideways scrolling). */
+.car-live-now { width: 100%; max-width: 100%; }
 .car-live-now[hidden] { display: none; }
-.car-live-strip { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.car-live-label { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px; font-size: .78rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--car-live-text); }
+.car-live-strip { display: grid; gap: 10px; min-width: 0; }
+.car-live-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.car-live-label { display: inline-flex; align-items: center; gap: 7px; font-size: .78rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--car-live-text); }
 .car-live-label i { width: 8px; height: 8px; border-radius: 50%; background: var(--car-live-dot); animation: car-pulse 1.6s ease-in-out infinite; }
-.car-live-items { display: flex; gap: 10px; overflow-x: auto; min-width: 0; padding: 2px; scrollbar-width: thin; scroll-snap-type: x proximity; }
-.car-live-item { flex: 0 0 auto; scroll-snap-align: start; display: flex; align-items: center; gap: 10px; max-width: 420px; padding: 8px 8px 8px 12px; border-radius: 999px; background: var(--car-bg); border: 1px solid color-mix(in srgb, var(--car-accent) 30%, var(--car-border)); box-shadow: var(--car-card-shadow); color: var(--car-text); text-decoration: none; }
+.car-live-more { font-size: .82rem; font-weight: 700; color: var(--car-accent); text-decoration: none; white-space: nowrap; }
+.car-live-more:hover { text-decoration: underline; }
+.car-live-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 10px; min-width: 0; }
+.car-live-item { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 10px 10px 10px 12px; border-radius: 16px; background: var(--car-bg); border: 1px solid var(--car-border); box-shadow: var(--car-card-shadow); color: var(--car-text); text-decoration: none; transition: border-color .15s ease, transform .15s ease; }
 .car-live-item:hover { border-color: var(--car-accent); }
-.car-live-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
-.car-live-title { font-weight: 700; font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 230px; }
-.car-live-sub { font-size: .74rem; color: var(--car-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 230px; }
-.car-live-item .car-btn svg { width: 15px; height: 15px; }
+.car-live-item:active { transform: scale(.99); }
+.car-live-item .car-stack { flex: 0 0 auto; }
+.car-live-text { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; line-height: 1.3; }
+.car-live-title { font-weight: 700; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.car-live-sub { font-size: .76rem; color: var(--car-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.car-live-listen { flex: 0 0 auto; }
+.car-live-listen svg { width: 15px; height: 15px; }
+@supports (background: color-mix(in srgb, red 50%, white)) {
+    .car-live-item { border-color: color-mix(in srgb, var(--car-accent) 28%, var(--car-border)); }
+}
+@media (max-width: 380px) {
+    /* Very narrow phones: the Listen button keeps only its icon. */
+    .car-live-listen > span { display: none; }
+    .car-live-listen { width: 36px; padding: 0; }
+}
 
 .car-empty-state { text-align: center; padding: 48px 20px; border: 1px dashed var(--car-border-strong); border-radius: var(--car-radius); background: var(--car-bg); }
 .car-empty-icon { display: inline-grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: var(--car-accent-soft); color: var(--car-accent); }
@@ -338,8 +353,6 @@ a.car-person-name:hover { text-decoration: underline; }
 
 @keyframes car-wave { 0%, 55%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(16deg); } 20%, 40% { transform: rotate(-10deg); } }
 @keyframes car-bars { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
-@keyframes car-ring { 0% { box-shadow: 0 0 0 0 rgb(5 150 105 / .55); } 100% { box-shadow: 0 0 0 9px rgb(5 150 105 / 0); } }
-@keyframes car-ring-accent { 0% { box-shadow: 0 0 0 0 rgb(5 150 105 / .45); } 70%, 100% { box-shadow: 0 0 0 10px rgb(5 150 105 / 0); } }
 @keyframes car-spin { to { transform: rotate(360deg); } }
 @keyframes car-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 @keyframes car-nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
@@ -348,8 +361,6 @@ a.car-person-name:hover { text-decoration: underline; }
     .car-create { width: 100%; }
     .car-create > summary { width: 100%; }
     .car-create-form { position: static; width: 100%; margin-top: 10px; box-shadow: none; }
-    .car-live-strip { flex-direction: column; align-items: stretch; gap: 8px; }
-    .car-live-title, .car-live-sub { max-width: 180px; }
 }
 
 @media (max-width: 560px) {

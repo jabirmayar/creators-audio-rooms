@@ -2,6 +2,14 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.4.1 - 2026-10-24
+
+### Changed
+
+- The invitation badge and card use a calm envelope icon instead of a pulsing sparkle.
+- Leaving a room and asking to speak (or cancelling the request) ask for confirmation in the room's own dialog. A host leaving is told whether a co-host takes over or the room will end.
+- The "Live now" widget is a wrapping grid that always fits its container (no sideways scrolling), shows at most 3 rooms on phones, and links to the full list when there are more.
+
 ## 1.4.0 - 2026-10-24
 
 ### Added

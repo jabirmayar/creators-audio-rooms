@@ -18,6 +18,7 @@
         star: svg('<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>'),
         users: svg('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20.5a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.6a6.5 6.5 0 0 1 3.5 5.9"/>'),
         clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/>'),
+        mail: svg('<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3.5 7.5l8.5 6 8.5-6"/>'),
         sparkle: svg('<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>'),
         check: svg('<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/>'),
         info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5h.01"/>'),
@@ -1034,7 +1035,9 @@
             switch (action) {
                 case 'join': return this.join(false);
                 case 'join-monitor': return this.join(true);
-                case 'leave': return this.leave(false);
+                case 'leave':
+                    if (await this.confirmLeave()) await this.leave(false);
+                    return;
                 case 'start':
                     this.unlockAudio();
                     return this.action('/start');
@@ -1042,7 +1045,14 @@
                     if (await this.confirm(this.tr('end_confirm'), this.tr('end'))) await this.action('/end');
                     return;
                 case 'mic': return this.toggleMic();
-                case 'hand': return this.action('/hand', { raised: !(this.state.me && this.state.me.hand_raised) });
+                case 'hand': {
+                    const raised = Boolean(this.state.me && this.state.me.hand_raised);
+                    const ok = raised
+                        ? await this.confirm(this.tr('lower_hand_confirm'), this.tr('lower_hand'), { tone: 'primary', cancelLabel: this.tr('keep_request') })
+                        : await this.confirm(this.tr('raise_hand_confirm'), this.tr('raise_hand'), { tone: 'primary', body: this.tr('raise_hand_confirm_body') });
+                    if (ok) await this.action('/hand', { raised: !raised });
+                    return;
+                }
                 case 'invite-accept': return this.action('/invitation', { accept: true });
                 case 'invite-decline': return this.action('/invitation', { accept: false });
                 case 'show-requests': {
@@ -1073,6 +1083,21 @@
             }
         }
 
+        /** Explains what leaving means for a host (handover, or the room ending without one). */
+        confirmLeave() {
+            const s = this.state;
+            const me = s && s.me;
+            if (!this.joined || !me) return Promise.resolve(true);
+            let body = '';
+            let tone = 'primary';
+            if (me.role === 'host') {
+                const next = (s.hosts || []).find((m) => m.role === 'co_host' && m.key !== me.key);
+                if (next) body = this.tr('leave_confirm_handover', { name: next.name });
+                else { body = this.tr('leave_confirm_host'); tone = 'danger'; }
+            }
+            return this.confirm(this.tr('leave_confirm'), this.tr('leave'), { tone, body });
+        }
+
         /** Close the member menu and return focus to the person it was opened for. */
         closeMenu() {
             if (!this.openMenu) return;
@@ -1083,11 +1108,13 @@
 
         // ─── Confirmation dialog (replaces window.confirm) ─────────────────
 
-        confirm(title, confirmLabel) {
+        /** options: { tone: 'danger' | 'primary', body, cancelLabel } */
+        confirm(title, confirmLabel, options) {
             if (this.dialog) this.dialog.resolve(false);
+            const opts = options || {};
             return new Promise((resolve) => {
                 const active = document.activeElement;
-                this.dialog = { title, confirmLabel, resolve, returnTo: active && this.el.contains(active) ? active : null };
+                this.dialog = { title, confirmLabel, body: opts.body || '', tone: opts.tone || 'danger', cancelLabel: opts.cancelLabel || '', resolve, returnTo: active && this.el.contains(active) ? active : null };
                 this.pendingFocus = '[data-action="dialog-cancel"]';
                 this.render();
             });
@@ -1107,9 +1134,10 @@
             const id = this.uid + '-dialog';
             return '<div class="car-dialog-backdrop" data-dialog-backdrop><div class="car-dialog" role="alertdialog" aria-modal="true" aria-labelledby="' + id + '">' +
                 '<p class="car-dialog-title" id="' + id + '">' + esc(this.dialog.title) + '</p>' +
+                (this.dialog.body ? '<p class="car-dialog-body">' + esc(this.dialog.body) + '</p>' : '') +
                 '<div class="car-dialog-actions">' +
-                    '<button type="button" class="car-btn" data-action="dialog-cancel">' + esc(this.tr('cancel')) + '</button>' +
-                    '<button type="button" class="car-btn car-btn--danger-solid" data-action="dialog-confirm">' + esc(this.dialog.confirmLabel) + '</button>' +
+                    '<button type="button" class="car-btn" data-action="dialog-cancel">' + esc(this.dialog.cancelLabel || this.tr('cancel')) + '</button>' +
+                    '<button type="button" class="car-btn ' + (this.dialog.tone === 'primary' ? 'car-btn--primary' : 'car-btn--danger-solid') + '" data-action="dialog-confirm">' + esc(this.dialog.confirmLabel) + '</button>' +
                 '</div></div></div>';
         }
 
@@ -1275,7 +1303,7 @@
             if (!this.joined || !me || !me.invited || me.role !== 'listener') return '';
             const id = this.uid + '-invite';
             return '<div class="car-invite" role="group" aria-labelledby="' + id + '">' +
-                '<span class="car-invite-icon">' + ICONS.sparkle + '</span><div class="car-invite-text"><p class="car-invite-title" id="' + id + '">' + esc(this.tr('invitation_title')) + '</p>' +
+                '<span class="car-invite-icon">' + ICONS.mail + '</span><div class="car-invite-text"><p class="car-invite-title" id="' + id + '">' + esc(this.tr('invitation_title')) + '</p>' +
                 '<p class="car-invite-body">' + esc(this.tr('invitation_body')) + '</p></div>' +
                 '<div class="car-invite-actions">' +
                     '<button type="button" class="car-btn car-btn--small" data-action="invite-decline">' + esc(this.tr('not_now')) + '</button>' +
@@ -1335,7 +1363,7 @@
                 badges.push(SPEAKING_BARS);
             }
             if (m.hand_raised) badges.push('<span class="car-icon-badge car-icon-badge--hand" title="' + esc(this.tr('hand_raised')) + '">' + ICONS.hand + '</span>');
-            else if (m.invited) badges.push('<span class="car-icon-badge car-icon-badge--invite" title="' + esc(this.tr('invited_badge')) + '">' + ICONS.sparkle + '</span>');
+            else if (m.invited) badges.push('<span class="car-icon-badge car-icon-badge--invite" title="' + esc(this.tr('invited_badge')) + '">' + ICONS.mail + '</span>');
 
             const canAct = s.can.moderate && !isMe && m.role !== 'monitor' && !(m.role === 'host' && !['host', 'monitor'].includes(me.role));
             const states = [m.hand_raised ? this.tr('hand_raised') : (m.invited ? this.tr('invited_badge') : '')].filter(Boolean);
@@ -1542,16 +1570,23 @@
             return '<' + tag + (href ? ' href="' + esc(href) + '"' : '') + ' class="car-live-item">' +
                 (faces.length ? '<span class="car-stack" aria-hidden="true">' + faces.map((p) => avatarHtml(p, 'sm')).join('') + '</span>' : '') +
                 '<span class="car-live-text"><span class="car-live-title">' + esc(room.title) + '</span><span class="car-live-sub">' + esc(sub) + '</span></span>' +
-                '<span class="car-btn car-btn--small car-btn--primary" aria-hidden="true">' + ICONS.headphones + esc(t.listen) + '</span>' +
+                '<span class="car-btn car-btn--small car-btn--primary car-live-listen" aria-hidden="true">' + ICONS.headphones + '<span>' + esc(t.listen) + '</span></span>' +
                 '</' + tag + '>';
         };
 
         const render = (rooms) => {
             // The room already open on this page is not advertised again.
             const here = window.location.pathname.replace(/\/$/, '');
-            const live = rooms.filter((r) => r.status === 'live' && !(r.url && safeUrl(r.url) && new URL(r.url, window.location.href).pathname.replace(/\/$/, '') === here)).slice(0, config.limit || 8);
+            // Phones show fewer, so the strip never pushes the page far down.
+            const narrow = window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+            const max = narrow ? Math.min(config.limit || 6, 3) : (config.limit || 6);
+            const live = rooms.filter((r) => r.status === 'live' && !(r.url && safeUrl(r.url) && new URL(r.url, window.location.href).pathname.replace(/\/$/, '') === here)).slice(0, max);
+            const allLive = rooms.filter((r) => r.status === 'live').length;
+            const more = safeUrl(config.all_url) && allLive > live.length
+                ? '<a class="car-live-more" href="' + esc(safeUrl(config.all_url)) + '">' + esc(fill(t.see_all, { count: allLive })) + '</a>'
+                : '';
             const html = live.length
-                ? '<div class="car-live-strip"><span class="car-live-label"><i></i>' + esc(t.live_now) + '</span><div class="car-live-items">' + live.map(item).join('') + '</div></div>'
+                ? '<div class="car-live-strip"><div class="car-live-head"><span class="car-live-label"><i></i>' + esc(t.live_now) + '</span>' + more + '</div><div class="car-live-items">' + live.map(item).join('') + '</div></div>'
                 : '';
             if (html === last) return;
             last = html;
@@ -1559,10 +1594,17 @@
             el.hidden = !live.length;
         };
 
-        render(config.rooms || []);
+        let latest = config.rooms || [];
+        const show = (rooms) => { latest = rooms; render(rooms); };
+        show(latest);
+        if (window.matchMedia) {
+            const query = window.matchMedia('(max-width: 640px)');
+            const redraw = () => render(latest);
+            if (query.addEventListener) query.addEventListener('change', redraw); else if (query.addListener) query.addListener(redraw);
+        }
         const refresh = async () => {
             if (document.hidden) return;
-            try { render((await api.request('GET', '')).rooms || []); } catch (e) { /* keep what is shown */ }
+            try { show((await api.request('GET', '')).rooms || []); } catch (e) { /* keep what is shown */ }
         };
         setInterval(refresh, 20000);
         document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });

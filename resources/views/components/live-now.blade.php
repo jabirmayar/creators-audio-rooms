@@ -5,7 +5,7 @@
     <x-creators-audio-rooms::live-now />
     <x-creators-audio-rooms::live-now :limit="4" />
 --}}
-@props(['limit' => 8])
+@props(['limit' => 6])
 
 @php
     $routeName = config('creators-audio-rooms.routes.name', 'audio-rooms.');
@@ -16,7 +16,6 @@
     $rooms = $who
         ? collect(app(\daacreators\CreatorsAudioRooms\Services\RoomStatePresenter::class)->directory($who))
             ->where('status', 'live')
-            ->take((int) $limit)
             ->map(fn ($room) => $room + ['url' => $hasPages ? route($routeName.'show', $room['id']) : null])
             ->values()
         : collect();
@@ -30,8 +29,9 @@
          data-audio-rooms-live="{{ json_encode([
             'api' => route($routeName.'api.index'),
             'limit' => (int) $limit,
+            'all_url' => \Illuminate\Support\Facades\Route::has($routeName.'index') ? route($routeName.'index') : null,
             'rooms' => $rooms,
-            'labels' => collect(['live_now', 'listen', 'people_count', 'hosted_by'])->mapWithKeys(fn ($key) => [$key => $ui($key)]),
+            'labels' => collect(['live_now', 'listen', 'people_count', 'hosted_by', 'see_all'])->mapWithKeys(fn ($key) => [$key => $ui($key)]),
          ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) }}"
          @if($rooms->isEmpty()) hidden @endif></div>
 @endif
