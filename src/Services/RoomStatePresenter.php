@@ -68,12 +68,27 @@ class RoomStatePresenter
             'activeMembers as people_count',
             'activeMembers as listeners_count' => fn ($q) => $q->where('role', RoomRole::Listener->value),
         ]);
+        // The host (present or not) and whoever is speaking right now, for the list cards.
+        $voices = [RoomRole::Host->value, RoomRole::CoHost->value, RoomRole::Speaker->value];
+        $rooms->load(['members' => fn ($q) => $q->whereIn('role', $voices)
+            ->where(fn ($q) => $q->where('state', MemberState::Joined->value)->orWhere('role', RoomRole::Host->value))
+            ->orderBy('joined_at')]);
 
-        return $rooms->map(fn (Room $room) => $this->summary($room) + [
-            'people' => (int) $room->people_count,
-            'listeners' => (int) $room->listeners_count,
-            'is_mine' => $room->created_by_key === $who->key,
-        ])->all();
+        return $rooms->map(function (Room $room) use ($who) {
+            $host = $room->members->firstWhere('role', RoomRole::Host);
+            $stage = $room->members->filter(fn (Member $m) => $m->state === MemberState::Joined)->values();
+
+            return $this->summary($room) + [
+                'people' => (int) $room->people_count,
+                'listeners' => (int) $room->listeners_count,
+                'is_mine' => $room->created_by_key === $who->key,
+                'host' => $host ? ['name' => $host->display_name, 'avatar_url' => $host->avatar_url, 'key' => $host->participant_key] : null,
+                'stage' => $stage->take(5)->map(fn (Member $m) => [
+                    'key' => $m->participant_key, 'name' => $m->display_name, 'avatar_url' => $m->avatar_url,
+                ])->all(),
+                'stage_count' => $stage->count(),
+            ];
+        })->all();
     }
 
     private function manager(): RoomManager
@@ -110,8 +125,12 @@ class RoomStatePresenter
             ->values()
             ->all();
 
+        $host = $room->members()->where('role', RoomRole::Host->value)->first();
+
         return [
             'room' => $this->summary($room),
+            // The room's host even when they are not connected, for "Hosted by …".
+            'host' => $host ? ['key' => $host->participant_key, 'name' => $host->display_name, 'avatar_url' => $host->avatar_url] : null,
             'hosts' => $byRole(RoomRole::Host, RoomRole::CoHost),
             'speakers' => $byRole(RoomRole::Speaker),
             'listeners' => $byRole(RoomRole::Listener),

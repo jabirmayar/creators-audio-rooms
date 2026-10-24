@@ -7,12 +7,26 @@
 [![Laravel](https://img.shields.io/badge/laravel-12%20%7C%2013-red.svg)](https://laravel.com)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+![Creators Audio Rooms: a live room on desktop and on a phone](https://raw.githubusercontent.com/jabirmayar/creators-audio-rooms/main/art/hero.png)
+
 Live audio rooms for Laravel, in the style of X/Twitter Spaces: hosts, speakers and listeners, hand raising and moderation.
 
 - **Nothing extra to host.** Audio travels directly between browsers (peer-to-peer WebRTC). Room updates and connection setup go through ordinary requests to your own Laravel app. No media server, WebSocket server or queue worker is required.
 - **Works with any user setup.** Several user tables or guards, integer IDs, UUIDs or external identity providers. Your app maps its users, permissions, audiences and tenants through small integration classes.
 - **No frontend stack imposed.** A prebuilt, dependency-free browser bundle and a Blade component. No Livewire, Filament, Vue, React or build step.
 - **Secure by default.** Every action and every connection message is authorized on the server. Hiding a button is never relied on.
+
+## Screenshots
+
+| A live room | On a phone |
+|---|---|
+| ![Room with hosts, speakers, listeners and a request to speak](https://raw.githubusercontent.com/jabirmayar/creators-audio-rooms/main/art/room.png) | ![The same room on a phone, with speaking indicators](https://raw.githubusercontent.com/jabirmayar/creators-audio-rooms/main/art/room-phone.png) |
+
+| Room list | Dark mode |
+|---|---|
+| ![Room list with live and upcoming rooms](https://raw.githubusercontent.com/jabirmayar/creators-audio-rooms/main/art/lobby.png) | ![A room in dark mode](https://raw.githubusercontent.com/jabirmayar/creators-audio-rooms/main/art/room-dark.png) |
+
+Speakers show animated sound bars while they talk, raised hands wave, and open invitations pulse; all motion stops for people who prefer reduced motion.
 
 ## Contents
 

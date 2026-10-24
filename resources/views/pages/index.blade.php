@@ -7,60 +7,48 @@
 @php($routes = config('creators-audio-rooms.routes.name', 'audio-rooms.'))
 <x-creators-audio-rooms::assets />
 
-<div class="car-root car-root--plain" data-theme="{{ config('creators-audio-rooms.branding.theme', 'light') }}">
-    <div class="car-list-head">
-        <h1 class="car-list-heading">{{ $ui('rooms') }}</h1>
+<div class="car-root car-root--plain car-lobby" data-theme="{{ config('creators-audio-rooms.branding.theme', 'light') }}">
+    <div class="car-lobby-head">
+        <div class="car-lobby-heading">
+            <h1 class="car-list-heading">{{ $ui('rooms') }}</h1>
+            <p class="car-lobby-subtitle">{{ $ui('rooms_subtitle') }}</p>
+        </div>
+
+        @if($canCreate)
+            <details class="car-create">
+                <summary class="car-btn car-btn--primary">{{ $ui('create_title') }}</summary>
+                <form class="car-form car-create-form" data-audio-rooms-create
+                      action="{{ route($routes.'api.store') }}" data-csrf="{{ csrf_token() }}">
+                    <label>{{ $ui('title_label') }}
+                        <input name="title" required maxlength="160" autocomplete="off">
+                    </label>
+                    <label>{{ $ui('description_label') }}
+                        <textarea name="description" rows="2" maxlength="2000"></textarea>
+                    </label>
+                    <p class="car-form-error" data-error role="alert"></p>
+                    <div><button type="submit" class="car-btn car-btn--primary">{{ $ui('create') }}</button></div>
+                </form>
+            </details>
+        @endif
     </div>
 
-    @if($canCreate)
-        <form class="car-form car-form--spaced" data-audio-rooms-create
-              action="{{ route($routes.'api.store') }}" data-csrf="{{ csrf_token() }}">
-            <strong>{{ $ui('create_title') }}</strong>
-            <label>{{ $ui('title_label') }}
-                <input name="title" required maxlength="160" autocomplete="off">
-            </label>
-            <label>{{ $ui('description_label') }}
-                <textarea name="description" rows="2" maxlength="2000"></textarea>
-            </label>
-            <p class="car-form-error" data-error role="alert"></p>
-            <div><button type="submit" class="car-btn car-btn--primary">{{ $ui('create') }}</button></div>
-        </form>
-    @endif
-
-    {{-- Refreshed in the background from the room list API, so new and ended rooms appear without a reload. --}}
+    {{-- Drawn and kept up to date by the browser bundle from these rooms and the room list API. --}}
     <div data-audio-rooms-list="{{ json_encode([
             'api' => route($routes.'api.index'),
-            'labels' => [
-                'live' => $ui('live'),
-                'scheduled' => $ui('scheduled'),
-                'people_count' => $ui('people_count'),
-                'yours' => $ui('yours'),
-                'no_rooms' => $ui('no_rooms'),
-            ],
+            'rooms' => $rooms->map(fn ($room) => $room + ['url' => route($routes.'show', $room['id'])])->values(),
+            'labels' => collect(['live', 'scheduled', 'people_count', 'yours', 'no_rooms', 'no_rooms_hint', 'hosted_by', 'live_for',
+                'started_just_now', 'duration_minutes', 'duration_hours', 'join_short', 'open_room', 'view_room'])
+                ->mapWithKeys(fn ($key) => [$key => $ui($key)]),
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) }}" aria-live="polite">
-        @if($rooms->isEmpty())
-            <p class="car-empty">{{ $ui('no_rooms') }}</p>
-        @else
-            <div class="car-list">
-                @foreach($rooms as $room)
-                    <a class="car-list-item" href="{{ route($routes.'show', $room['id']) }}">
-                        <div class="car-list-item-main">
-                            <div class="car-list-item-title">{{ $room['title'] }}</div>
-                            <div class="car-meta">
-                                @if($room['audience_label'])<span>{{ $room['audience_label'] }}</span>@endif
-                                @if($room['status'] === 'live')<span>{{ $ui('people_count', ['count' => $room['people']]) }}</span>@endif
-                                @if($room['is_mine'])<span>{{ $ui('yours') }}</span>@endif
-                            </div>
-                        </div>
-                        @if($room['status'] === 'live')
-                            <span class="car-badge car-badge--live">{{ $ui('live') }}</span>
-                        @else
-                            <span class="car-badge">{{ $ui('scheduled') }}</span>
-                        @endif
-                    </a>
-                @endforeach
-            </div>
-        @endif
+        <noscript>
+            <ul>
+                @forelse($rooms as $room)
+                    <li><a href="{{ route($routes.'show', $room['id']) }}">{{ $room['title'] }}</a></li>
+                @empty
+                    <li>{{ $ui('no_rooms') }}</li>
+                @endforelse
+            </ul>
+        </noscript>
     </div>
 </div>
 @endsection

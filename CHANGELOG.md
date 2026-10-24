@@ -2,6 +2,19 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.2.0 - 2026-10-24
+
+### Changed
+
+- Redesigned room list: cards with the host, the faces of who is speaking, how long the room has been live, the number of people and a Join button. "Start a room" opens the form on demand, and an empty list shows a proper empty state.
+- Redesigned room: one speaker area for hosts and speakers with larger faces and Host/Co-host labels, a compact listener grid, "Hosted by · Live for · in the room" in the header, a clearer join bar, and no fixed height (small rooms no longer leave empty space). A loading placeholder shows until the room is ready.
+- New icon set (inline SVG): solid status badges on faces, a waving hand for raised hands, animated sound bars while someone speaks, a pulsing invitation badge, crown and star for hosts and co-hosts, and icons in section titles, notices and buttons. All motion respects reduced-motion settings.
+- People without a photo get one of six soft colours instead of the same tint.
+
+### Added
+
+- The room list API and pages include each room's host, current speakers (`stage`, `stage_count`) and the room state includes `host`.
+
 ## 1.1.2 - 2026-10-24
 
 ### Fixed

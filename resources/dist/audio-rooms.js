@@ -8,13 +8,25 @@
 
     // ─── Small helpers ──────────────────────────────────────────────────────
 
+    const svg = (body, fill) => '<svg viewBox="0 0 24 24" fill="' + (fill || 'none') + '" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + body + '</svg>';
     const ICONS = {
-        mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg>',
-        micOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 2l20 20M9 9v1a3 3 0 0 0 5.1 2.1M15 9.3V5a3 3 0 0 0-5.9-.6"/><path d="M17 16.9A7 7 0 0 1 5 10M19 10a7 7 0 0 1-.1 1.2M12 17v5"/></svg>',
-        hand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-6-2.4l-3.6-3.6a2 2 0 0 1 2.8-2.8L7 15"/></svg>',
-        leave: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
-        play: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>',
+        mic: svg('<rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/>'),
+        micOff: svg('<path d="M3 3l18 18"/><path d="M9 9v2a3 3 0 0 0 5.1 2.1M15 10.5V5.5a3 3 0 0 0-5.7-1.3"/><path d="M5.5 11a6.5 6.5 0 0 0 10.4 5.2M18.5 11c0 .8-.1 1.5-.4 2.2M12 17.5V21M8.5 21h7"/>'),
+        hand: svg('<path d="M8 12.5V6a1.5 1.5 0 0 1 3 0v5.5"/><path d="M11 11V4.5a1.5 1.5 0 0 1 3 0V11"/><path d="M14 11.5V6a1.5 1.5 0 0 1 3 0v6"/><path d="M17 12V9.5a1.5 1.5 0 0 1 3 0V15a7 7 0 0 1-7 7h-1.2a6 6 0 0 1-4.5-2l-3.6-4a1.6 1.6 0 0 1 2.4-2.1L8 15.6V12.5"/>'),
+        headphones: svg('<path d="M3.5 15.5V12a8.5 8.5 0 0 1 17 0v3.5"/><rect x="2.5" y="14" width="5" height="7" rx="2"/><rect x="16.5" y="14" width="5" height="7" rx="2"/>'),
+        crown: svg('<path d="M3 8l4.5 4.5L12 5l4.5 7.5L21 8l-1.8 10.5H4.8z"/><path d="M5 21.5h14"/>'),
+        star: svg('<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>'),
+        users: svg('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20.5a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.6a6.5 6.5 0 0 1 3.5 5.9"/>'),
+        clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/>'),
+        sparkle: svg('<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>'),
+        check: svg('<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/>'),
+        info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5h.01"/>'),
+        alert: svg('<path d="M10.3 4.1L2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 4.1a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4M12 17h.01"/>'),
+        leave: svg('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'),
+        play: svg('<path d="M8 5v14l11-7z"/>', 'currentColor'),
     };
+    /** Animated "talking" bars shown on someone's face while they speak. */
+    const SPEAKING_BARS = '<span class="car-icon-badge car-icon-badge--speaking" aria-hidden="true"><i></i><i></i><i></i></span>';
 
     const ROLE_SPEAKS = { host: true, co_host: true, speaker: true, listener: false };
 
@@ -35,6 +47,38 @@
     }
 
     let instances = 0;
+
+    /** Stable soft colour for people without a photo (six hues). */
+    function hue(key) {
+        let n = 0;
+        const text = String(key || '');
+        for (let i = 0; i < text.length; i++) n += text.charCodeAt(i);
+        return n % 6;
+    }
+
+    function avatarHtml(person, size, inner) {
+        const img = safeUrl(person.avatar_url);
+        return '<span class="car-avatar car-hue-' + hue(person.key || person.name) + (size ? ' car-avatar--' + size : '') + '">' +
+            (img ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : esc(initials(person.name))) + (inner || '') + '</span>';
+    }
+
+    function fill(text, replace) {
+        let out = String(text || '');
+        Object.keys(replace || {}).forEach((k) => { out = out.split(':' + k).join(replace[k]); });
+        return out;
+    }
+
+    /** "Live for 12 min" / "Live for 1 h 5 min" / "Started just now". */
+    function liveFor(startedAt, t) {
+        const started = Date.parse(startedAt || '');
+        if (!started) return '';
+        const minutes = Math.max(0, Math.floor((Date.now() - started) / 60000));
+        if (minutes < 1) return t.started_just_now || '';
+        const duration = minutes < 60
+            ? fill(t.duration_minutes, { count: minutes })
+            : fill(t.duration_hours, { hours: Math.floor(minutes / 60), minutes: minutes % 60 });
+        return fill(t.live_for, { duration });
+    }
 
     function initials(name) {
         const parts = String(name || '?').trim().split(/\s+/).slice(0, 2);
@@ -142,6 +186,9 @@
             });
 
             this.bindLifecycle();
+            this.clock = setInterval(() => {
+                this.el.querySelectorAll('[data-live-for]').forEach((node) => { node.textContent = liveFor(node.getAttribute('data-live-for'), this.t); });
+            }, 30000);
             this.load();
         }
 
@@ -1094,7 +1141,7 @@
         render() {
             if (!this.state) {
                 this.el.innerHTML = this.notice ? this.renderBanner()
-                    : '<div class="car-body"><p class="car-empty">' + esc(this.tr('state_connecting')) + '</p></div>';
+                    : '<div class="car-loading" role="status">' + esc(this.tr('state_connecting')) + '</div>';
                 this.el.innerHTML += this.liveRegion();
                 return;
             }
@@ -1107,8 +1154,12 @@
                 : '<span class="car-badge">' + esc(this.tr(room.status === 'ended' ? 'ended' : 'scheduled')) + '</span>';
 
             const meta = [];
-            if (room.audience_label) meta.push(esc(room.audience_label));
-            if (room.status === 'live') meta.push(esc(this.tr('people_count', { count: s.counts.people })));
+            if (s.host) meta.push('<span class="car-meta-host">' + avatarHtml(s.host, 'xs') + esc(this.tr('hosted_by', { name: s.host.name })) + '</span>');
+            if (room.status === 'live') {
+                meta.push('<span class="car-meta-item">' + ICONS.clock + '<span data-live-for="' + esc(room.started_at || '') + '">' + esc(liveFor(room.started_at, this.t)) + '</span></span>');
+                meta.push('<span class="car-meta-item">' + ICONS.users + esc(this.tr('people_count', { count: s.counts.people })) + '</span>');
+            }
+            if (room.audience_label) meta.push('<span>' + esc(room.audience_label) + '</span>');
 
             const audio = Array.from(this.el.querySelectorAll('audio'));
             // The same live-region node is kept, so screen readers neither miss nor repeat announcements.
@@ -1117,7 +1168,7 @@
             this.el.innerHTML =
                 '<header class="car-header"><div class="car-header-top"><div class="car-header-main">' +
                     '<h2 class="car-title">' + esc(room.title) + '</h2>' +
-                    (meta.length ? '<div class="car-meta">' + meta.map((m) => '<span>' + m + '</span>').join('') + '</div>' : '') +
+                    (meta.length ? '<div class="car-meta car-meta--dots">' + meta.join('') + '</div>' : '') +
                 '</div>' + statusBadge + '</div>' +
                 (room.description ? '<p class="car-description">' + esc(room.description) + '</p>' : '') +
                 '</header>' +
@@ -1189,7 +1240,7 @@
             if (!this.joined || !me || !me.invited || me.role !== 'listener') return '';
             const id = this.uid + '-invite';
             return '<div class="car-invite" role="group" aria-labelledby="' + id + '">' +
-                '<div class="car-invite-text"><p class="car-invite-title" id="' + id + '">' + esc(this.tr('invitation_title')) + '</p>' +
+                '<span class="car-invite-icon">' + ICONS.sparkle + '</span><div class="car-invite-text"><p class="car-invite-title" id="' + id + '">' + esc(this.tr('invitation_title')) + '</p>' +
                 '<p class="car-invite-body">' + esc(this.tr('invitation_body')) + '</p></div>' +
                 '<div class="car-invite-actions">' +
                     '<button type="button" class="car-btn car-btn--small" data-action="invite-decline">' + esc(this.tr('not_now')) + '</button>' +
@@ -1198,7 +1249,8 @@
         }
 
         banner(kind, text, extra) {
-            return '<div class="car-banner car-banner--' + esc(kind) + '" role="' + (kind === 'error' ? 'alert' : 'status') + '"><span>' + esc(text) + '</span>' + (extra || '') + '</div>';
+            const icon = { ok: ICONS.check, info: ICONS.info, warn: ICONS.alert, error: ICONS.alert }[kind] || ICONS.info;
+            return '<div class="car-banner car-banner--' + esc(kind) + '" role="' + (kind === 'error' ? 'alert' : 'status') + '"><span class="car-banner-icon">' + icon + '</span><span>' + esc(text) + '</span>' + (extra || '') + '</div>';
         }
 
         renderSections() {
@@ -1207,46 +1259,48 @@
 
             if (s.can.moderate && (s.requests || []).length) {
                 const id = this.uid + '-req';
-                html.push('<section class="car-section" id="' + id + '" aria-labelledby="' + id + '-title"><h3 class="car-section-title" id="' + id + '-title">' + esc(this.tr('requests')) + ' <span class="car-count">' + s.requests.length + '</span></h3><div class="car-requests">' +
-                    s.requests.map((m) => '<div class="car-request">' + this.avatar(m) + '<span class="car-request-name">' + esc(m.name) + '</span>' +
+                html.push('<section class="car-section" id="' + id + '" aria-labelledby="' + id + '-title"><h3 class="car-section-title" id="' + id + '-title">' + ICONS.hand + esc(this.tr('requests')) + ' <span class="car-count">' + s.requests.length + '</span></h3><div class="car-requests">' +
+                    s.requests.map((m) => '<div class="car-request">' + avatarHtml(m, 'sm') + '<span class="car-request-name">' + esc(m.name) + '</span>' +
                         '<button type="button" class="car-btn car-btn--small car-btn--primary" data-action="approve_speaker" data-target="' + esc(m.key) + '">' + esc(this.tr('approve')) + '</button>' +
                         '<button type="button" class="car-btn car-btn--small" data-action="decline_request" data-target="' + esc(m.key) + '">' + esc(this.tr('decline')) + '</button></div>').join('') +
                     '</div></section>');
             }
 
-            html.push(this.section('hosts', s.hosts, false));
-            html.push(this.section('speakers', s.speakers, false));
-            html.push(this.section('listeners', s.listeners, true));
+            // Everyone who can speak shares one stage, hosts first.
+            const stage = [].concat(s.hosts || [], s.speakers || []);
+            const stageId = this.uid + '-stage';
+            html.push('<section class="car-section car-stage" aria-labelledby="' + stageId + '"><h3 class="car-section-title" id="' + stageId + '">' + ICONS.mic + esc(this.tr('speakers')) +
+                ' <span class="car-count">' + stage.length + '</span></h3>' +
+                (stage.length
+                    ? '<div class="car-grid car-grid--stage">' + stage.map((m) => this.person(m, 'stage')).join('') + '</div>'
+                    : '<p class="car-empty">' + esc(this.tr(s.room.status === 'live' ? 'empty_stage' : 'waiting_for_host')) + '</p>') +
+                '</section>');
+
+            const listeners = s.listeners || [];
+            const listId = this.uid + '-listeners';
+            html.push('<section class="car-section" aria-labelledby="' + listId + '"><h3 class="car-section-title" id="' + listId + '">' + ICONS.headphones + esc(this.tr('listeners')) +
+                ' <span class="car-count">' + listeners.length + '</span></h3>' +
+                (listeners.length
+                    ? '<div class="car-grid car-grid--listeners">' + listeners.map((m) => this.person(m, 'compact')).join('') + '</div>'
+                    : '<p class="car-empty">' + esc(this.tr('empty_listeners')) + '</p>') +
+                '</section>');
             return html.join('');
         }
 
-        section(name, people, small) {
-            const items = (people || []).map((m) => this.person(m)).join('');
-            const empty = name === 'listeners' ? this.tr('empty_listeners') : '';
-            if (!items && name === 'speakers') return '';
-            const id = this.uid + '-' + name;
-            return '<section class="car-section" aria-labelledby="' + id + '"><h3 class="car-section-title" id="' + id + '">' + esc(this.tr(name)) +
-                ' <span class="car-count">' + (people || []).length + '</span></h3>' +
-                (items ? '<div class="car-grid' + (small ? ' car-grid--listeners' : '') + '">' + items + '</div>' : '<p class="car-empty">' + esc(empty || this.tr('nobody_here')) + '</p>') +
-                '</section>';
-        }
-
-        avatar(m) {
-            return '<span class="car-avatar">' + (m.avatar_url ? '<img src="' + esc(m.avatar_url) + '" alt="" loading="lazy">' : esc(initials(m.name))) + '</span>';
-        }
-
-        person(m) {
+        person(m, variant) {
             const s = this.state;
             const me = s.me;
             const isMe = me && m.key === me.key;
             const speaks = ROLE_SPEAKS[m.role];
-            const roleLabel = m.role === 'listener' ? '' : this.tr(m.role);
+            const roleLabel = m.role === 'host' || m.role === 'co_host' ? this.tr(m.role) : '';
             const badges = [];
             if (speaks && (m.self_muted || m.moderator_muted)) {
-                badges.push('<span class="car-icon-badge' + (m.moderator_muted ? ' car-icon-badge--danger' : '') + '" title="' + esc(this.tr(m.moderator_muted ? 'muted_by_host' : 'muted')) + '">' + ICONS.micOff + '</span>');
+                badges.push('<span class="car-icon-badge car-icon-badge--' + (m.moderator_muted ? 'danger' : 'muted') + '" title="' + esc(this.tr(m.moderator_muted ? 'muted_by_host' : 'muted')) + '">' + ICONS.micOff + '</span>');
+            } else if (speaks) {
+                badges.push(SPEAKING_BARS);
             }
             if (m.hand_raised) badges.push('<span class="car-icon-badge car-icon-badge--hand" title="' + esc(this.tr('hand_raised')) + '">' + ICONS.hand + '</span>');
-            else if (m.invited) badges.push('<span class="car-icon-badge car-icon-badge--invite" title="' + esc(this.tr('invited_badge')) + '">' + ICONS.mic + '</span>');
+            else if (m.invited) badges.push('<span class="car-icon-badge car-icon-badge--invite" title="' + esc(this.tr('invited_badge')) + '">' + ICONS.sparkle + '</span>');
 
             const canAct = s.can.moderate && !isMe && !(m.role === 'host' && me.role !== 'host');
             const states = [m.hand_raised ? this.tr('hand_raised') : (m.invited ? this.tr('invited_badge') : '')].filter(Boolean);
@@ -1255,12 +1309,12 @@
             const profile = !canAct && !isMe ? safeUrl(m.profile_url) : null;
             const nameText = esc(isMe ? this.tr('you') : m.name);
 
-            let html = '<div class="car-person' + (m.connected === false ? ' is-disconnected' : '') + (m.invited ? ' is-invited' : '') + '" data-person="' + esc(m.key) + '">' +
-                '<span class="car-avatar">' + (m.avatar_url ? '<img src="' + esc(m.avatar_url) + '" alt="" loading="lazy">' : esc(initials(m.name))) + badges.join('') + '</span>' +
+            let html = '<div class="car-person car-person--' + (variant || 'stage') + (m.connected === false ? ' is-disconnected' : '') + (m.invited ? ' is-invited' : '') + '" data-person="' + esc(m.key) + '">' +
+                avatarHtml(m, variant === 'compact' ? 'md' : 'lg', badges.join('')) +
                 (profile
                     ? '<a class="car-person-name" href="' + esc(profile) + '" target="_blank" rel="noopener noreferrer" title="' + esc(this.tr('view_profile')) + ': ' + esc(m.name) + '">' + nameText + '</a>'
                     : '<span class="car-person-name" title="' + esc(m.name) + '">' + nameText + '</span>') +
-                (roleLabel ? '<span class="car-person-role">' + esc(roleLabel) + '</span>' : '');
+                (roleLabel ? '<span class="car-role-chip' + (m.role === 'host' ? ' car-role-chip--host' : '') + '">' + (m.role === 'host' ? ICONS.crown : ICONS.star) + esc(roleLabel) + '</span>' : '');
 
             if (canAct) {
                 html += '<button type="button" class="car-person-menu" data-action="menu" data-target="' + esc(m.key) + '" aria-haspopup="true" aria-expanded="' + (this.openMenu === m.key) + '" aria-label="' + esc(this.tr('actions_for', { name: m.name })) + '"></button>';
@@ -1305,12 +1359,16 @@
                 if (room.status === 'ended' || ['removed', 'replaced', 'signed_out'].includes(this.status)) return '';
                 const isHost = me && (me.role === 'host' || me.role === 'co_host');
                 // Without WebRTC there is nothing to join; the notice explains why.
-                if (window.RTCPeerConnection && (room.status === 'live' || isHost)) {
-                    out.push('<button type="button" class="car-btn car-btn--primary" data-action="join"' + (this.status === 'joining' ? ' disabled' : '') + '>' +
-                        esc(this.status === 'joining' ? this.tr('joining') : (room.status === 'live' ? this.tr('join') : this.tr('join_as_host'))) + '</button>');
-                }
-                if (this.config.background_note !== false) out.push('<span class="car-meta car-meta--inline">' + esc(this.tr('background_note')) + '</span>');
-                return '<div class="car-controls">' + out.join('') + '</div>';
+                if (!window.RTCPeerConnection || !(room.status === 'live' || isHost)) return '';
+                out.push('<button type="button" class="car-btn car-btn--primary car-btn--wide" data-action="join"' + (this.status === 'joining' ? ' disabled' : '') + '>' + ICONS.headphones +
+                    esc(this.status === 'joining' ? this.tr('joining') : (room.status === 'live' ? this.tr('join') : this.tr('join_as_host'))) + '</button>');
+                const hints = [];
+                if (!isHost) hints.push(this.tr('join_hint'));
+                // Phones may pause audio in the background; only worth saying on touch devices.
+                const touch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+                if (touch && this.config.background_note !== false) hints.push(this.tr('background_note'));
+                if (hints.length) out.push('<p class="car-join-hint">' + hints.map(esc).join(' ') + '</p>');
+                return '<div class="car-controls car-controls--join">' + out.join('') + '</div>';
             }
 
             if (me && ROLE_SPEAKS[me.role]) {
@@ -1318,7 +1376,7 @@
                 out.push('<button type="button" class="car-btn ' + (live ? 'car-btn--primary' : 'car-btn--mic-off') + '" data-action="mic" aria-pressed="' + live + '"' + (this.micStarting ? ' disabled' : '') + '>' +
                     (live ? ICONS.mic : ICONS.micOff) + '<span>' + esc(this.micStarting ? this.tr('mic_starting') : this.tr(live ? 'mic_on' : 'mic_off')) + '</span></button>');
             } else if (s.can.request_to_speak) {
-                out.push('<button type="button" class="car-btn' + (me.hand_raised ? ' car-btn--primary' : '') + '" data-action="hand" aria-pressed="' + Boolean(me.hand_raised) + '">' + ICONS.hand +
+                out.push('<button type="button" class="car-btn car-btn--hand' + (me.hand_raised ? ' car-btn--primary is-raised' : '') + '" data-action="hand" aria-pressed="' + Boolean(me.hand_raised) + '">' + ICONS.hand +
                     '<span>' + esc(this.tr(me.hand_raised ? 'lower_hand' : 'raise_hand')) + '</span></button>');
             }
             if (s.can.start) out.push('<button type="button" class="car-btn car-btn--primary" data-action="start">' + esc(this.tr('start')) + '</button>');
@@ -1369,32 +1427,52 @@
         const api = new Api(config.api, null);
         let last = null;
 
-        const item = (room) => {
-            const meta = [];
-            if (room.audience_label) meta.push(esc(room.audience_label));
-            if (room.status === 'live') meta.push(esc(String(t.people_count || ':count').split(':count').join(room.people)));
-            if (room.is_mine) meta.push(esc(t.yours));
+        const card = (room) => {
             const href = safeUrl(room.url);
-            return '<' + (href ? 'a href="' + esc(href) + '"' : 'div') + ' class="car-list-item"><div class="car-list-item-main">' +
-                '<div class="car-list-item-title">' + esc(room.title) + '</div>' +
-                '<div class="car-meta">' + meta.map((m) => '<span>' + m + '</span>').join('') + '</div></div>' +
-                (room.status === 'live' ? '<span class="car-badge car-badge--live">' + esc(t.live) + '</span>' : '<span class="car-badge">' + esc(t.scheduled) + '</span>') +
-                '</' + (href ? 'a' : 'div') + '>';
+            const live = room.status === 'live';
+            const top = [live
+                ? '<span class="car-badge car-badge--live">' + esc(t.live) + '</span><span class="car-card-time">' + ICONS.clock + '<span data-live-for="' + esc(room.started_at || '') + '">' + esc(liveFor(room.started_at, t)) + '</span></span>'
+                : '<span class="car-badge">' + esc(t.scheduled) + '</span>'];
+            if (room.is_mine) top.push('<span class="car-chip">' + esc(t.yours) + '</span>');
+
+            const stage = room.stage || [];
+            const extra = Math.max(0, (room.stage_count || 0) - stage.length);
+            const stack = live && stage.length
+                ? '<span class="car-stack" aria-hidden="true">' + stage.map((p) => avatarHtml(p, 'sm')).join('') + (extra ? '<span class="car-stack-more">+' + extra + '</span>' : '') + '</span>'
+                : '';
+            const host = room.host ? '<span class="car-card-host">' + avatarHtml(room.host, 'xs') + '<span>' + esc(fill(t.hosted_by, { name: room.host.name })) + '</span></span>' : '';
+            const action = live ? t.join_short : (room.is_mine ? t.open_room : t.view_room);
+            const people = live ? '<span class="car-card-people">' + ICONS.users + esc(fill(t.people_count, { count: room.people })) + '</span>' : '';
+
+            return '<article class="car-card' + (live ? ' is-live' : '') + '">' +
+                '<div class="car-card-top">' + top.join('') + '</div>' +
+                '<h3 class="car-card-title">' + (href ? '<a class="car-card-link" href="' + esc(href) + '">' + esc(room.title) + '</a>' : esc(room.title)) + '</h3>' +
+                (room.description ? '<p class="car-card-description">' + esc(room.description) + '</p>' : '') +
+                (room.audience_label ? '<p class="car-card-audience">' + esc(room.audience_label) + '</p>' : '') +
+                host +
+                '<div class="car-card-foot">' + stack + people +
+                    (href ? '<a class="car-btn car-btn--small' + (live ? ' car-btn--primary' : '') + '" href="' + esc(href) + '" tabindex="-1" aria-hidden="true">' + esc(action) + '</a>' : '') +
+                '</div></article>';
+        };
+
+        const render = (rooms) => {
+            const html = rooms.length
+                ? '<div class="car-cards">' + rooms.map(card).join('') + '</div>'
+                : '<div class="car-empty-state"><span class="car-empty-icon">' + ICONS.mic + '</span><p class="car-empty-title">' + esc(t.no_rooms) + '</p><p class="car-empty-hint">' + esc(t.no_rooms_hint) + '</p></div>';
+            // Skip identical updates so focus and hover are not disturbed.
+            if (html !== last) { last = html; el.innerHTML = html; }
         };
 
         const refresh = async () => {
             if (document.hidden) return;
-            try {
-                const data = await api.request('GET', '');
-                const html = (data.rooms || []).length
-                    ? '<div class="car-list">' + data.rooms.map(item).join('') + '</div>'
-                    : '<p class="car-empty">' + esc(t.no_rooms) + '</p>';
-                // Skip identical updates so focus and hover are not disturbed.
-                if (html !== last) { last = html; el.innerHTML = html; }
-            } catch (e) { /* keep the current list */ }
+            try { render((await api.request('GET', '')).rooms || []); } catch (e) { /* keep the current list */ }
         };
 
+        render(config.rooms || []);
         setInterval(refresh, 15000);
+        setInterval(() => {
+            el.querySelectorAll('[data-live-for]').forEach((node) => { node.textContent = liveFor(node.getAttribute('data-live-for'), t); });
+        }, 30000);
         document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
     }
 
