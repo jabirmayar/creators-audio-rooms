@@ -1,0 +1,61 @@
+{
+    "name": "daacreators/creators-audio-rooms",
+    "description": "Live audio rooms for Laravel: hosts, speakers and listeners with hand raising and moderation. Peer-to-peer WebRTC audio with signaling through your own app, so there is nothing extra to host.",
+    "keywords": [
+        "laravel",
+        "webrtc",
+        "audio",
+        "live",
+        "rooms",
+        "voice"
+    ],
+    "license": "MIT",
+    "type": "library",
+    "authors": [
+        {
+            "name": "DAA Creators"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "illuminate/support": "^11.0|^12.0",
+        "illuminate/database": "^11.0|^12.0",
+        "illuminate/http": "^11.0|^12.0",
+        "illuminate/routing": "^11.0|^12.0",
+        "illuminate/console": "^11.0|^12.0"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.18",
+        "orchestra/testbench": "^9.0|^10.0",
+        "phpunit/phpunit": "^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "daacreators\\CreatorsAudioRooms\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "daacreators\\CreatorsAudioRooms\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "daacreators\\CreatorsAudioRooms\\CreatorsAudioRoomsServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "analyse": "phpstan analyse --memory-limit=1G",
+        "format": "pint",
+        "lint": "pint --test"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

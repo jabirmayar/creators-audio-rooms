@@ -1,0 +1,17 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 6
+    paths:
+        - src
+        - database
+        - routes
+    treatPhpDocTypesAsCertain: false
+    ignoreErrors:
+        # Package views ("creators-audio-rooms::…") are registered when the provider boots,
+        # which static analysis does not do, so their names cannot be checked as view-string.
+        -
+            identifier: argument.type
+            message: '#view-string#'
+            path: src/Http/Controllers/RoomPageController.php

@@ -1,0 +1,243 @@
+/*!
+ * creators-audio-rooms · MIT
+ * Theme with CSS variables on .car-root (set from config 'branding'), or override in your own stylesheet.
+ * data-theme="light" | "dark" | "auto" (follows the system setting).
+ * Layout uses logical properties, so right-to-left pages work without extra rules.
+ */
+.car-root, .car-page-body {
+    --car-accent: #059669;
+    --car-accent-contrast: #ffffff;
+    --car-radius: 14px;
+    --car-bg: #ffffff;
+    --car-page-bg: #f1f5f9;
+    --car-surface: #f8fafc;
+    --car-border: #e2e8f0;
+    --car-text: #0f172a;
+    --car-muted: #64748b;
+    --car-danger: #dc2626;
+    --car-danger-bg: #fef2f2;
+    --car-danger-border: #fecaca;
+    --car-danger-text: #991b1b;
+    --car-live-text: #b91c1c;
+    --car-live-dot: #ef4444;
+    --car-warning-bg: #fffbeb;
+    --car-warning-border: #fde68a;
+    --car-warning-text: #92400e;
+    --car-hand: #b45309;
+    --car-ok-border: #bfe3d5;
+    --car-shadow: 0 12px 30px rgb(15 23 42 / .14);
+    --car-backdrop: rgb(15 23 42 / .45);
+    --car-focus: 0 0 0 3px rgba(5, 150, 105, .35);
+    --car-accent-soft: #e6f4ef;
+    color-scheme: light;
+}
+
+/* Dark theme: explicit, or "auto" when the system prefers dark. */
+.car-root[data-theme="dark"], .car-page-body[data-theme="dark"] {
+    --car-bg: #111827;
+    --car-page-bg: #0b1120;
+    --car-surface: #1f2937;
+    --car-border: #334155;
+    --car-text: #e5e7eb;
+    --car-muted: #94a3b8;
+    --car-danger: #f87171;
+    --car-danger-bg: #3b1219;
+    --car-danger-border: #7f1d1d;
+    --car-danger-text: #fecaca;
+    --car-live-text: #fca5a5;
+    --car-warning-bg: #3a2a0c;
+    --car-warning-border: #78530f;
+    --car-warning-text: #fcd34d;
+    --car-hand: #fbbf24;
+    --car-ok-border: #1f5f4a;
+    --car-shadow: 0 12px 30px rgb(0 0 0 / .45);
+    --car-backdrop: rgb(0 0 0 / .6);
+    --car-accent-soft: #12352b;
+    color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+    .car-root[data-theme="auto"], .car-page-body[data-theme="auto"] {
+        --car-bg: #111827;
+        --car-page-bg: #0b1120;
+        --car-surface: #1f2937;
+        --car-border: #334155;
+        --car-text: #e5e7eb;
+        --car-muted: #94a3b8;
+        --car-danger: #f87171;
+        --car-danger-bg: #3b1219;
+        --car-danger-border: #7f1d1d;
+        --car-danger-text: #fecaca;
+        --car-live-text: #fca5a5;
+        --car-warning-bg: #3a2a0c;
+        --car-warning-border: #78530f;
+        --car-warning-text: #fcd34d;
+        --car-hand: #fbbf24;
+        --car-ok-border: #1f5f4a;
+        --car-shadow: 0 12px 30px rgb(0 0 0 / .45);
+        --car-backdrop: rgb(0 0 0 / .6);
+        --car-accent-soft: #12352b;
+        color-scheme: dark;
+    }
+}
+
+.car-root {
+    font-family: inherit;
+    color: var(--car-text);
+    background: var(--car-bg);
+    border: 1px solid var(--car-border);
+    border-radius: var(--car-radius);
+    display: flex;
+    flex-direction: column;
+    min-height: 420px;
+    position: relative;
+}
+.car-root--plain { border: 0; background: transparent; min-height: 0; display: block; }
+.car-root *, .car-root *::before, .car-root *::after { box-sizing: border-box; }
+.car-root button { font: inherit; }
+.car-root a { color: inherit; }
+.car-root :focus-visible { outline: none; box-shadow: var(--car-focus); }
+
+.car-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+/* Ready-made pages (package layout) */
+.car-page-body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--car-page-bg); color: var(--car-text); }
+.car-page { max-width: 880px; margin: 0 auto; padding: 24px 16px 48px; }
+.car-back-link { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 12px; font-size: .9rem; color: var(--car-muted); text-decoration: none; }
+.car-back-link:hover { color: var(--car-text); }
+.car-list-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.car-list-heading { margin: 0; font-size: 1.35rem; }
+
+/* Header */
+.car-header { padding: 18px 20px 14px; border-bottom: 1px solid var(--car-border); }
+.car-header-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.car-header-main { min-width: 0; }
+.car-title { margin: 0; font-size: 1.15rem; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.car-meta { margin-top: 4px; color: var(--car-muted); font-size: .82rem; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.car-meta--inline { margin: 0; }
+.car-description { margin: 8px 0 0; color: var(--car-muted); font-size: .9rem; line-height: 1.5; white-space: pre-line; }
+.car-badge { display: inline-flex; align-items: center; gap: 6px; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 4px 9px; border-radius: 999px; background: var(--car-surface); color: var(--car-muted); border: 1px solid var(--car-border); white-space: nowrap; }
+.car-badge--live { background: var(--car-danger-bg); color: var(--car-live-text); border-color: var(--car-danger-border); }
+.car-badge--live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--car-live-dot); animation: car-pulse 1.6s ease-in-out infinite; }
+
+/* Status banner */
+.car-banner { margin: 12px 20px 0; padding: 10px 12px; border-radius: 10px; font-size: .86rem; line-height: 1.45; display: flex; gap: 10px; align-items: center; background: var(--car-surface); border: 1px solid var(--car-border); }
+.car-banner > span { flex: 1; min-width: 0; }
+.car-banner--warn { background: var(--car-warning-bg); color: var(--car-warning-text); border-color: var(--car-warning-border); }
+.car-banner--error { background: var(--car-danger-bg); color: var(--car-danger-text); border-color: var(--car-danger-border); }
+.car-banner--ok { background: var(--car-accent-soft); border-color: var(--car-ok-border); }
+.car-banner-actions { display: flex; gap: 6px; flex-shrink: 0; margin-inline-start: auto; }
+
+/* Invitation to speak */
+.car-invite { margin: 12px 20px 0; padding: 14px; border-radius: 12px; border: 1px solid var(--car-accent); background: var(--car-accent-soft); display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.car-invite-text { flex: 1 1 220px; min-width: 0; }
+.car-invite-title { margin: 0; font-weight: 700; font-size: .95rem; }
+.car-invite-body { margin: 2px 0 0; color: var(--car-muted); font-size: .85rem; line-height: 1.45; }
+.car-invite-actions { display: flex; gap: 8px; }
+
+/* Body */
+.car-body { flex: 1; padding: 16px 20px 20px; }
+.car-section + .car-section { margin-top: 20px; }
+.car-section-title { margin: 0 0 10px; font-size: .74rem; font-weight: 700; color: var(--car-muted); text-transform: uppercase; letter-spacing: .06em; display: flex; align-items: center; gap: 8px; }
+.car-count { font-weight: 600; color: var(--car-muted); background: var(--car-surface); border-radius: 999px; padding: 1px 8px; font-size: .72rem; }
+.car-empty { color: var(--car-muted); font-size: .86rem; margin: 0; }
+
+.car-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 14px 10px; }
+.car-grid--listeners { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); }
+
+.car-person { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; min-width: 0; }
+.car-avatar { position: relative; width: 64px; height: 64px; border-radius: 50%; background: var(--car-accent-soft); color: var(--car-accent); display: grid; place-items: center; font-weight: 700; font-size: 1.15rem; overflow: visible; transition: box-shadow .15s ease; }
+.car-grid--listeners .car-avatar { width: 50px; height: 50px; font-size: .95rem; }
+.car-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.car-person.is-speaking .car-avatar { box-shadow: 0 0 0 3px var(--car-bg), 0 0 0 6px var(--car-accent); }
+.car-person.is-disconnected .car-avatar { opacity: .45; }
+.car-person.is-invited .car-avatar { outline: 2px dashed var(--car-accent); outline-offset: 3px; }
+.car-person-name { font-size: .84rem; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.car-person-name { text-decoration: none; }
+a.car-person-name:hover { text-decoration: underline; }
+.car-person-role { font-size: .72rem; color: var(--car-muted); margin-top: -4px; }
+.car-icon-badge { position: absolute; inset-inline-end: -2px; bottom: -2px; width: 24px; height: 24px; border-radius: 50%; background: var(--car-bg); border: 1px solid var(--car-border); display: grid; place-items: center; color: var(--car-muted); }
+.car-icon-badge--danger { color: var(--car-danger); }
+.car-icon-badge--hand, .car-icon-badge--invite { inset-inline-end: auto; inset-inline-start: -2px; }
+.car-icon-badge--hand { color: var(--car-hand); }
+.car-icon-badge--invite { color: var(--car-accent); }
+.car-icon-badge svg { width: 13px; height: 13px; }
+
+/* Member actions (moderators) */
+.car-person-menu { position: absolute; inset: 0; border: 0; background: transparent; cursor: pointer; border-radius: 12px; }
+.car-menu { position: absolute; z-index: 30; top: 72px; inset-inline-start: 0; min-width: 190px; background: var(--car-bg); border: 1px solid var(--car-border); border-radius: 12px; box-shadow: var(--car-shadow); padding: 6px; text-align: start; }
+.car-menu--flip { inset-inline-start: auto; inset-inline-end: 0; }
+.car-menu-title { font-size: .74rem; color: var(--car-muted); padding: 6px 10px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.car-menu button, .car-menu a { display: block; width: 100%; text-align: start; border: 0; background: transparent; padding: 9px 10px; border-radius: 8px; font-size: .86rem; cursor: pointer; color: var(--car-text); text-decoration: none; }
+.car-menu button:hover, .car-menu a:hover, .car-menu button:focus-visible, .car-menu a:focus-visible { background: var(--car-surface); }
+.car-menu .is-danger { color: var(--car-danger); }
+.car-menu-sep { height: 1px; background: var(--car-border); margin: 4px 6px; }
+
+/* Requests panel */
+.car-requests { border: 1px solid var(--car-border); border-radius: 12px; overflow: hidden; }
+.car-request { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+.car-request + .car-request { border-top: 1px solid var(--car-border); }
+.car-request-name { flex: 1; min-width: 0; font-weight: 600; font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.car-request .car-avatar { width: 34px; height: 34px; font-size: .8rem; }
+
+/* Controls */
+.car-controls { border-radius: 0 0 var(--car-radius) var(--car-radius); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--car-border); background: var(--car-surface); position: sticky; bottom: 0; z-index: 10; }
+.car-controls-spacer { flex: 1; }
+.car-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--car-border); background: var(--car-bg); color: var(--car-text); font-weight: 600; font-size: .9rem; cursor: pointer; transition: background .15s ease, transform .1s ease; white-space: nowrap; text-decoration: none; }
+.car-btn:hover:not(:disabled) { background: var(--car-surface); }
+.car-btn:active:not(:disabled) { transform: scale(.98); }
+.car-btn:disabled { opacity: .55; cursor: not-allowed; }
+.car-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+.car-btn--primary { background: var(--car-accent); color: var(--car-accent-contrast); border-color: var(--car-accent); }
+.car-btn--primary:hover:not(:disabled) { background: var(--car-accent); filter: brightness(.92); }
+.car-btn--danger { color: var(--car-danger); }
+.car-btn--danger-solid { background: var(--car-danger); color: #fff; border-color: var(--car-danger); }
+.car-btn--danger-solid:hover:not(:disabled) { background: var(--car-danger); filter: brightness(.92); }
+.car-btn--mic-off { background: var(--car-text); color: var(--car-bg); border-color: var(--car-text); }
+.car-btn--mic-off:hover:not(:disabled) { background: var(--car-text); filter: brightness(1.35); }
+.car-btn--small { min-height: 34px; padding: 0 12px; font-size: .82rem; }
+.car-btn--icon { width: 42px; padding: 0; }
+.car-btn-count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--car-hand); color: #fff; font-size: .72rem; font-weight: 700; display: inline-grid; place-items: center; }
+.car-btn.is-attention { animation: car-nudge .5s ease-in-out 2; }
+
+/* Confirmation dialog */
+.car-dialog-backdrop { position: fixed; inset: 0; z-index: 1000; background: var(--car-backdrop); display: grid; place-items: center; padding: 16px; }
+.car-dialog { width: min(420px, 100%); background: var(--car-bg); color: var(--car-text); border: 1px solid var(--car-border); border-radius: var(--car-radius); box-shadow: var(--car-shadow); padding: 20px; }
+.car-dialog-title { margin: 0; font-size: 1.02rem; font-weight: 700; line-height: 1.4; }
+.car-dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+
+/* Room list page */
+.car-list { display: grid; gap: 12px; }
+.car-list-item { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 1px solid var(--car-border); border-radius: var(--car-radius); background: var(--car-bg); color: inherit; text-decoration: none; }
+.car-list-item:hover { border-color: var(--car-accent); }
+.car-list-item-main { flex: 1; min-width: 0; }
+.car-list-item-title { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.car-form { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--car-border); border-radius: var(--car-radius); background: var(--car-bg); }
+.car-form--spaced { margin-bottom: 20px; }
+.car-form label { font-size: .82rem; font-weight: 600; display: grid; gap: 4px; }
+.car-form input, .car-form textarea { font: inherit; padding: 9px 11px; border: 1px solid var(--car-border); border-radius: 10px; width: 100%; background: var(--car-bg); color: var(--car-text); }
+.car-form-error { color: var(--car-danger); font-size: .84rem; margin: 0; }
+
+@keyframes car-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@keyframes car-nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+
+@media (max-width: 560px) {
+    .car-header, .car-body { padding-inline: 14px; }
+    .car-banner, .car-invite { margin-inline: 14px; }
+    .car-controls { padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
+    .car-btn { padding: 0 13px; }
+    .car-btn-label--hide-sm { display: none; }
+    .car-grid { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .car-root *, .car-root *::before { animation: none !important; transition: none !important; }
+}
+
+/* Accent tints follow the accent colour (and the theme background) where color-mix is supported. */
+@supports (background: color-mix(in srgb, red 50%, white)) {
+    .car-root, .car-root[data-theme] {
+        --car-focus: 0 0 0 3px color-mix(in srgb, var(--car-accent) 35%, transparent);
+        --car-accent-soft: color-mix(in srgb, var(--car-accent) 14%, var(--car-bg));
+        --car-ok-border: color-mix(in srgb, var(--car-accent) 30%, var(--car-bg));
+    }
+}
