@@ -23,6 +23,15 @@ class RoomActionDenied extends RuntimeException
         return new self($reason, $status);
     }
 
+    /**
+     * An expected answer (not allowed, room full, session expired and similar),
+     * not a failure: keep it out of the app's error log.
+     */
+    public function report(): bool
+    {
+        return true;
+    }
+
     public function render(): JsonResponse
     {
         return response()->json([

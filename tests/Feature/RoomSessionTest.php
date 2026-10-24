@@ -4,6 +4,7 @@ namespace daacreators\CreatorsAudioRooms\Tests\Feature;
 
 use daacreators\CreatorsAudioRooms\Http\Controllers\RoomApiController;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Sync and signal requests are authenticated by the room session token only,
@@ -80,6 +81,16 @@ class RoomSessionTest extends ApiTestCase
         $this->signedOut();
         $this->json('GET', self::API."/rooms/{$roomId}/session", [], [RoomApiController::TOKEN_HEADER => $token])
             ->assertStatus(401)->assertJson(['error' => 'not_signed_in']);
+    }
+
+    public function test_expected_refusals_are_not_written_to_the_error_log(): void
+    {
+        Log::spy();
+        $roomId = $this->createLiveRoom($this->staff());
+
+        $this->json('GET', self::API."/rooms/{$roomId}/sync")->assertStatus(401);
+
+        Log::shouldNotHaveReceived('error');
     }
 
     public function test_renewal_is_refused_for_a_replaced_connection(): void
