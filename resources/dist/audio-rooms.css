@@ -94,7 +94,7 @@
 .car-root--plain { border: 0; background: transparent; min-height: 0; display: block; }
 .car-root *, .car-root *::before, .car-root *::after { box-sizing: border-box; }
 .car-root button { font: inherit; }
-.car-root a { color: inherit; }
+.car-root a:not(.car-btn) { color: inherit; }
 .car-root :focus-visible { outline: none; box-shadow: var(--car-focus); }
 
 .car-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
