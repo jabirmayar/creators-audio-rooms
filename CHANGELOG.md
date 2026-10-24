@@ -2,6 +2,12 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.5.1 - 2026-10-24
+
+### Fixed
+
+- "Who can join" checkboxes keep their native look inside apps whose stylesheets restyle checkboxes; the package's text-field styles no longer apply to checkboxes.
+
 ## 1.5.0 - 2026-10-24
 
 ### Added

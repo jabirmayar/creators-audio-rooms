@@ -348,7 +348,7 @@ a.car-person-name:hover { text-decoration: underline; }
 .car-form { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--car-border); border-radius: var(--car-radius); background: var(--car-bg); }
 .car-form--spaced { margin-bottom: 20px; }
 .car-form label { font-size: .82rem; font-weight: 600; display: grid; gap: 4px; }
-.car-form input, .car-form textarea { font: inherit; padding: 9px 11px; border: 1px solid var(--car-border); border-radius: 10px; width: 100%; background: var(--car-bg); color: var(--car-text); }
+.car-form input:not([type="checkbox"]):not([type="radio"]), .car-form textarea { font: inherit; padding: 9px 11px; border: 1px solid var(--car-border); border-radius: 10px; width: 100%; background: var(--car-bg); color: var(--car-text); }
 .car-form-error { color: var(--car-danger); font-size: .84rem; margin: 0; }
 .car-form-error:empty { display: none; }
 
@@ -357,7 +357,8 @@ a.car-person-name:hover { text-decoration: underline; }
 .car-audience legend { padding: 0; margin-bottom: 6px; font-size: .82rem; font-weight: 600; }
 .car-form .car-check { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--car-border); border-radius: 10px; background: var(--car-bg); font-weight: 500; cursor: pointer; }
 .car-form .car-check:hover { border-color: var(--car-border-strong); }
-.car-form .car-check input { width: 18px; height: 18px; margin: 0; padding: 0; flex-shrink: 0; accent-color: var(--car-accent); }
+/* Native checkboxes in the accent colour, reset so a host app's form styles cannot reshape them. */
+.car-form .car-check input[type="checkbox"] { appearance: auto; -webkit-appearance: checkbox; width: 18px; height: 18px; margin: 0; padding: 0; flex-shrink: 0; border: initial; border-radius: 4px; background: initial; background-image: none; box-shadow: none; accent-color: var(--car-accent); }
 .car-check span { display: flex; flex-direction: column; min-width: 0; font-size: .86rem; overflow-wrap: anywhere; }
 .car-check small { color: var(--car-muted); font-size: .76rem; font-weight: 400; }
 .car-form .car-check:has(input:checked) { border-color: var(--car-accent); background: var(--car-accent-soft); }
