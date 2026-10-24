@@ -49,6 +49,12 @@ class RoomApiController extends Controller
         ]);
     }
 
+    /** What the signed-in host may start a room for (drives the "Who can join" picker). */
+    public function audiences(Request $request): JsonResponse
+    {
+        return response()->json($this->presenter->audienceChoices($this->who($request)));
+    }
+
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -56,6 +62,9 @@ class RoomApiController extends Controller
             'description' => ['nullable', 'string', 'max:2000'],
             // Go live right away instead of creating a not-started room.
             'start' => ['sometimes', 'boolean'],
+            // "type:ref" keys from GET /api/audiences; empty means everyone (when allowed).
+            'audiences' => ['sometimes', 'array', 'max:50'],
+            'audiences.*' => ['string', 'max:260'],
         ]);
 
         $who = $this->who($request);

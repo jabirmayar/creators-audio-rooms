@@ -30,6 +30,11 @@ final class Tables
         return self::name('room_moderation_log');
     }
 
+    public static function audiences(): string
+    {
+        return self::name('room_audiences');
+    }
+
     public static function connection(): ?string
     {
         return config('creators-audio-rooms.database_connection') ?: null;

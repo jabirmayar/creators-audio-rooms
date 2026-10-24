@@ -1472,7 +1472,37 @@
 
     // ─── Create-room form (room list page) ──────────────────────────────────
 
+    /** "Who can join": Everyone vs. chosen audiences, search and a running count. */
+    function mountAudiencePicker(form) {
+        const picker = form.querySelector('[data-audience-picker]');
+        if (!picker) return;
+        const everyone = picker.querySelector('[data-audience-everyone]');
+        const boxes = () => Array.from(picker.querySelectorAll('input[name="audiences[]"]'));
+        const count = picker.querySelector('[data-audience-count]');
+        const update = () => {
+            const chosen = boxes().filter((b) => b.checked).length;
+            picker.classList.toggle('is-everyone', Boolean(everyone && everyone.checked));
+            if (count) count.textContent = chosen ? fill(picker.getAttribute('data-label-selected'), { count: chosen }) : '';
+        };
+        picker.addEventListener('change', (e) => {
+            if (e.target === everyone && everyone.checked) boxes().forEach((b) => { b.checked = false; });
+            if (e.target.name === 'audiences[]' && e.target.checked && everyone) everyone.checked = false;
+            if (everyone && !everyone.checked && !boxes().some((b) => b.checked)) everyone.checked = true;
+            update();
+        });
+        const search = picker.querySelector('[data-audience-search]');
+        if (search) {
+            search.addEventListener('input', () => {
+                const q = search.value.trim().toLowerCase();
+                picker.querySelectorAll('[data-audience-item]').forEach((item) => { item.hidden = q !== '' && item.getAttribute('data-search').indexOf(q) === -1; });
+                picker.querySelectorAll('[data-audience-group]').forEach((group) => { group.hidden = !group.querySelector('[data-audience-item]:not([hidden])'); });
+            });
+        }
+        update();
+    }
+
     function mountCreateForm(form) {
+        mountAudiencePicker(form);
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const error = form.querySelector('[data-error]');
@@ -1484,6 +1514,7 @@
                 const data = await api.request('POST', '', {
                     title: form.elements.title.value,
                     description: form.elements.description ? form.elements.description.value : null,
+                    audiences: Array.from(form.querySelectorAll('input[name="audiences[]"]:checked')).map((b) => b.value),
                     start: true,
                 });
                 if (data.url) window.location.href = data.url + (data.url.indexOf('?') === -1 ? '?' : '&') + 'enter=1';

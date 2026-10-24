@@ -28,6 +28,7 @@ class RoomPageController extends Controller
 
         return view('creators-audio-rooms::pages.index', [
             'rooms' => collect($this->presenter->directory($who)),
+            'audienceChoices' => $this->presenter->audienceChoices($who),
             'canCreate' => $this->authorizer->allows($who, RoomAction::Create)
                 && $this->authorizer->allows($who, RoomAction::Host),
             'participant' => $who,

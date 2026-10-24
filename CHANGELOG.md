@@ -2,6 +2,14 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.5.0 - 2026-10-24
+
+### Added
+
+- Rooms for chosen audiences: implement `ProvidesAudienceOptions` (with `AudienceOption`) on your audience resolver to give the start-room form a **Who can join** picker. Hosts pick one or more audiences (classes, groups, teams…); only people in at least one of them, the room's hosts and monitors can see or join the room. Rooms for others never appear in lists or the "Live now" widget.
+- "Everyone" (no audience) is only offered to hosts the app allows (`allowsEveryone()`).
+- New table `room_audiences` (run `php artisan migrate`), `GET /api/audiences`, and an `audiences` field on `POST /api/rooms`. Room data includes `audiences` and an `audience_label` built from them.
+
 ## 1.4.1 - 2026-10-24
 
 ### Changed

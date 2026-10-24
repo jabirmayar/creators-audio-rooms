@@ -4,6 +4,7 @@ namespace daacreators\CreatorsAudioRooms\Services;
 
 use daacreators\CreatorsAudioRooms\Contracts\AudienceResolver;
 use daacreators\CreatorsAudioRooms\Contracts\Authorizer;
+use daacreators\CreatorsAudioRooms\Contracts\ProvidesAudienceOptions;
 use daacreators\CreatorsAudioRooms\Contracts\TenantResolver;
 use daacreators\CreatorsAudioRooms\Enums\MemberState;
 use daacreators\CreatorsAudioRooms\Enums\RoomAction;
@@ -65,7 +66,34 @@ class RoomAccess
         }
 
         return $this->authorizer->allows($who, RoomAction::Discover, $room)
-            && $this->audience->includes($who, $room);
+            && $this->audience->includes($who, $room)
+            && $this->inChosenAudience($who, $room);
+    }
+
+    /**
+     * Rooms started for specific audiences (classes, groups…) are only for
+     * people in at least one of them. Monitors oversee every room.
+     */
+    public function inChosenAudience(ParticipantIdentity $who, Room $room): bool
+    {
+        $audiences = $room->relationLoaded('audiences') ? $room->audiences : $room->audiences()->get();
+        if ($audiences->isEmpty()) {
+            return true;
+        }
+        if ($this->authorizer->allows($who, RoomAction::Monitor, $room)) {
+            return true;
+        }
+        if (! $this->audience instanceof ProvidesAudienceOptions) {
+            return false;
+        }
+
+        foreach ($audiences as $audience) {
+            if ($this->audience->inAudience($who, $audience->audience_type, $audience->audience_ref)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

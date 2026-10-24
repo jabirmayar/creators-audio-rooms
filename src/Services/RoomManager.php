@@ -2,8 +2,10 @@
 
 namespace daacreators\CreatorsAudioRooms\Services;
 
+use daacreators\CreatorsAudioRooms\Contracts\AudienceResolver;
 use daacreators\CreatorsAudioRooms\Contracts\Notifier;
 use daacreators\CreatorsAudioRooms\Contracts\ParticipantResolver;
+use daacreators\CreatorsAudioRooms\Contracts\ProvidesAudienceOptions;
 use daacreators\CreatorsAudioRooms\Contracts\TenantResolver;
 use daacreators\CreatorsAudioRooms\Enums\MemberState;
 use daacreators\CreatorsAudioRooms\Enums\RoomAction;
@@ -17,6 +19,7 @@ use daacreators\CreatorsAudioRooms\Models\ModerationLogEntry;
 use daacreators\CreatorsAudioRooms\Models\Room;
 use daacreators\CreatorsAudioRooms\Signaling\SessionToken;
 use daacreators\CreatorsAudioRooms\Signaling\SignalStore;
+use daacreators\CreatorsAudioRooms\Support\AudienceOption;
 use daacreators\CreatorsAudioRooms\Support\ParticipantIdentity;
 use daacreators\CreatorsAudioRooms\Support\Tables;
 use Illuminate\Support\Facades\DB;
@@ -36,6 +39,7 @@ class RoomManager
         private readonly SignalStore $signals,
         private readonly TenantResolver $tenants,
         private readonly Notifier $notifier,
+        private readonly AudienceResolver $audiences,
     ) {}
 
     // ─── Lifecycle ───────────────────────────────────────────────────────
@@ -62,6 +66,7 @@ class RoomManager
         ]);
 
         $this->access->ensureCanCreate($host, $draft);
+        $audiences = $this->chosenAudiences($host, $data['audiences'] ?? null);
 
         // Counts rooms this person currently hosts, not rooms they once created: after handing a
         // room to a co-host (leaving makes the co-host the host) they can start another one.
@@ -72,7 +77,7 @@ class RoomManager
             throw RoomActionDenied::because('too_many_rooms', 409);
         }
 
-        $room = DB::connection(Tables::connection())->transaction(function () use ($draft, $host) {
+        $room = DB::connection(Tables::connection())->transaction(function () use ($draft, $host, $audiences) {
             $draft->save();
             $draft->members()->create([
                 'participant_key' => $host->key,
@@ -83,6 +88,9 @@ class RoomManager
                 // The creator holds the host role but is not in the room until they join.
                 'state' => MemberState::Left,
             ]);
+            foreach ($audiences as $option) {
+                $draft->audiences()->create(['audience_type' => $option->type, 'audience_ref' => $option->ref, 'label' => $option->label]);
+            }
 
             return $draft;
         });
@@ -91,6 +99,42 @@ class RoomManager
         $this->log('info', 'room created', $room, $host->key);
 
         return $room;
+    }
+
+    /**
+     * Validates the audiences a host picked ("type:ref" keys) against what the
+     * app offers them. Empty means everyone, which the app may not allow.
+     *
+     * @return list<AudienceOption>
+     */
+    private function chosenAudiences(ParticipantIdentity $host, mixed $keys): array
+    {
+        $keys = array_values(array_unique(array_filter(array_map('strval', (array) ($keys ?? [])))));
+        if (! $this->audiences instanceof ProvidesAudienceOptions) {
+            if ($keys !== []) {
+                throw RoomActionDenied::because('invalid_audience', 422);
+            }
+
+            return [];
+        }
+
+        $offered = [];
+        foreach ($this->audiences->optionsFor($host) as $option) {
+            $offered[$option->key()] = $option;
+        }
+
+        $chosen = [];
+        foreach ($keys as $key) {
+            if (! isset($offered[$key])) {
+                throw RoomActionDenied::because('invalid_audience', 422);
+            }
+            $chosen[] = $offered[$key];
+        }
+        if ($chosen === [] && ! $this->audiences->allowsEveryone($host)) {
+            throw RoomActionDenied::because('audience_required', 422);
+        }
+
+        return $chosen;
     }
 
     public function start(ParticipantIdentity $who, Room $room): Room

@@ -68,6 +68,13 @@ class Room extends Model
         return $this->members()->where('state', MemberState::Joined->value);
     }
 
+    /** @return HasMany<RoomAudience, $this> */
+    public function audiences(): HasMany
+    {
+        // In the order the host picked them.
+        return $this->hasMany(RoomAudience::class, 'room_id')->orderBy('id');
+    }
+
     /** @return HasMany<Ban, $this> */
     public function bans(): HasMany
     {

@@ -25,8 +25,40 @@
                     <label>{{ $ui('description_label') }}
                         <textarea name="description" rows="2" maxlength="2000"></textarea>
                     </label>
-                    <p class="car-form-error" data-error role="alert"></p>
-                    <div><button type="submit" class="car-btn car-btn--primary">{{ $ui('create') }}</button></div>
+
+                    @php($choices = $audienceChoices ?? ['enabled' => false, 'everyone' => true, 'options' => []])
+                    @php($cannotStart = $choices['enabled'] && empty($choices['options']) && ! $choices['everyone'])
+                    @if($choices['enabled'] && ! $cannotStart)
+                        <fieldset class="car-audience" data-audience-picker data-label-selected="{{ $ui('audience_selected') }}">
+                            <legend>{{ $ui('who_can_join') }}</legend>
+                            @if($choices['everyone'])
+                                <label class="car-check car-check--everyone">
+                                    <input type="checkbox" name="everyone" value="1" checked data-audience-everyone>
+                                    <span><strong>{{ $ui('everyone') }}</strong><small>{{ $ui('everyone_hint') }}</small></span>
+                                </label>
+                            @endif
+                            @if(count($choices['options']) > 8)
+                                <input type="search" class="car-audience-search" placeholder="{{ $ui('audience_search') }}" aria-label="{{ $ui('audience_search') }}" data-audience-search>
+                            @endif
+                            <div class="car-audience-list" data-audience-list>
+                                @foreach(collect($choices['options'])->groupBy(fn ($o) => $o['group'] ?? '') as $group => $items)
+                                    <div class="car-audience-group" data-audience-group>
+                                        @if($group !== '')<p class="car-audience-group-title">{{ $group }}</p>@endif
+                                        @foreach($items as $option)
+                                            <label class="car-check" data-audience-item data-search="{{ \Illuminate\Support\Str::lower($option['label'].' '.($option['group'] ?? '')) }}">
+                                                <input type="checkbox" name="audiences[]" value="{{ $option['key'] }}">
+                                                <span>{{ $option['label'] }}</span>
+                                            </label>
+                                        @endforeach
+                                    </div>
+                                @endforeach
+                            </div>
+                            <p class="car-audience-count" data-audience-count aria-live="polite"></p>
+                        </fieldset>
+                    @endif
+
+                    <p class="car-form-error" data-error role="alert">@if($cannotStart){{ $ui('no_audiences') }}@endif</p>
+                    <div><button type="submit" class="car-btn car-btn--primary" @disabled($cannotStart)>{{ $ui('create') }}</button></div>
                 </form>
             </details>
         @endif

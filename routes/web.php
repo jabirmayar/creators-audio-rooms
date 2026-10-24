@@ -28,6 +28,7 @@ Route::middleware(array_merge((array) ($routes['middleware'] ?? ['web']), [Resol
         }
 
         Route::prefix('api')->name('api.')->group(function () {
+            Route::get('/audiences', [RoomApiController::class, 'audiences'])->middleware('throttle:creators-audio-rooms.actions')->name('audiences');
             Route::get('/rooms', [RoomApiController::class, 'index'])->middleware('throttle:creators-audio-rooms.sync')->name('index');
             Route::post('/rooms', [RoomApiController::class, 'store'])->middleware('throttle:creators-audio-rooms.create')->name('store');
 

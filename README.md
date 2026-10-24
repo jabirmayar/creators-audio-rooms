@@ -355,6 +355,41 @@ class Audiences implements AudienceResolver
 }
 ```
 
+#### Letting hosts choose who can join
+
+Implement `ProvidesAudienceOptions` on the same class and the start-room form gets a **Who can join** picker. Hosts pick one or more audiences (classes, groups, teams…); the room is then visible to, and joinable by, only people in at least one of them, plus its hosts and any monitors. People outside never see it in lists or the "Live now" widget.
+
+```php
+use daacreators\CreatorsAudioRooms\Contracts\ProvidesAudienceOptions;
+use daacreators\CreatorsAudioRooms\Support\AudienceOption;
+
+class Audiences implements AudienceResolver, ProvidesAudienceOptions
+{
+    // What this host may start a room for (grouped in the picker by the last argument).
+    public function optionsFor(ParticipantIdentity $host): array
+    {
+        return Team::forMember($host->id)->get()
+            ->map(fn ($team) => AudienceOption::make('team', $team->id, $team->name, 'Teams'))
+            ->all();
+    }
+
+    // Whether the host may leave the audience empty, i.e. open the room to everyone.
+    public function allowsEveryone(ParticipantIdentity $host): bool
+    {
+        return User::find($host->id)?->is_admin === true;
+    }
+
+    public function inAudience(ParticipantIdentity $who, string $type, string $ref): bool
+    {
+        return $type === 'team' && TeamMember::where('team_id', $ref)->where('user_id', $who->id)->exists();
+    }
+
+    // includes() and label() as above (return true / null when only chosen audiences are used).
+}
+```
+
+The API takes the same choices as `"type:ref"` keys: `GET /audio-rooms/api/audiences` lists them for the signed-in host, and `POST /audio-rooms/api/rooms` accepts `audiences: ["team:4", "team:9"]`. Choices are checked against `optionsFor()`; an empty list needs `allowsEveryone()`. Rooms show their audiences as labels ("For Red team, Chess club").
+
 ### Tenants
 
 For organisation isolation, return a tenant key. New rooms are created inside the creator's tenant. Every list, page, API call and connection message is restricted to people allowed in that tenant.

@@ -4,6 +4,7 @@ namespace daacreators\CreatorsAudioRooms\Services;
 
 use daacreators\CreatorsAudioRooms\Contracts\AudienceResolver;
 use daacreators\CreatorsAudioRooms\Contracts\Authorizer;
+use daacreators\CreatorsAudioRooms\Contracts\ProvidesAudienceOptions;
 use daacreators\CreatorsAudioRooms\Enums\MemberState;
 use daacreators\CreatorsAudioRooms\Enums\RoomAction;
 use daacreators\CreatorsAudioRooms\Enums\RoomRole;
@@ -28,12 +29,17 @@ class RoomStatePresenter
     /** @return array<string, mixed> */
     public function summary(Room $room): array
     {
+        $audiences = $room->relationLoaded('audiences') ? $room->audiences : $room->audiences()->get();
+        $labels = $audiences->map(fn ($a) => $a->label ?: $a->audience_ref)->filter()->values();
+
         return [
             'id' => $room->id,
             'title' => $room->title,
             'description' => $room->description,
             'status' => $room->status->value,
-            'audience_label' => $this->audience->label($room),
+            // Chosen audiences (classes, groups…) win over the resolver's single label.
+            'audience_label' => $labels->isNotEmpty() ? $labels->implode(', ') : $this->audience->label($room),
+            'audiences' => $audiences->map(fn ($a) => ['type' => $a->audience_type, 'ref' => $a->audience_ref, 'label' => $a->label])->values()->all(),
             'started_at' => $room->started_at?->toIso8601String(),
             'ended_at' => $room->ended_at?->toIso8601String(),
             'end_reason' => $room->end_reason,
@@ -55,6 +61,7 @@ class RoomStatePresenter
     public function directory(ParticipantIdentity $who, int $limit = 50): array
     {
         $rooms = $this->access->discoverableRooms($who)
+            ->with('audiences')
             ->orderByRaw("case when status = 'live' then 0 else 1 end")
             ->latest()
             ->limit($limit)
@@ -89,6 +96,25 @@ class RoomStatePresenter
                 'stage_count' => $stage->count(),
             ];
         })->all();
+    }
+
+    /**
+     * Picker data for starting a room: whether "Everyone" is allowed and the
+     * audiences this host may choose (empty when the app offers none).
+     *
+     * @return array{enabled: bool, everyone: bool, options: list<array{key: string, type: string, ref: string, label: string, group: ?string}>}
+     */
+    public function audienceChoices(ParticipantIdentity $host): array
+    {
+        if (! $this->audience instanceof ProvidesAudienceOptions) {
+            return ['enabled' => false, 'everyone' => true, 'options' => []];
+        }
+
+        return [
+            'enabled' => true,
+            'everyone' => $this->audience->allowsEveryone($host),
+            'options' => array_map(fn ($o) => $o->toArray(), $this->audience->optionsFor($host)),
+        ];
     }
 
     private function manager(): RoomManager
