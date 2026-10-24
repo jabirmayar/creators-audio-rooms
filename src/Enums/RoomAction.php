@@ -20,4 +20,6 @@ enum RoomAction: string
     case Remove = 'remove';
     case Ban = 'ban';
     case End = 'end';
+    // Join any room as a monitor (never granted by default).
+    case Monitor = 'monitor';
 }

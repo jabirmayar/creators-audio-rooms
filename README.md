@@ -298,6 +298,27 @@ class Permissions implements Authorizer
 
 When a room is being created, `$room` is the unsaved draft (title, audience, tenant), so you can decide per audience.
 
+### Monitoring
+
+Monitors are people your app trusts to oversee rooms they do not host, such as site administrators or safety staff. A monitor:
+
+- joins any room they can see with **Join as monitor**, even when every listener place is taken, and is not blocked by a room-level removal or ban;
+- hears the room but cannot speak or raise a hand;
+- can moderate everyone, including the host (mute, remove, ban, move to listeners, end the room), and every action is recorded in the moderation log under their key;
+- cannot be removed, muted or otherwise acted on by hosts;
+- is **always visible**: the room shows "Monitored by …" to everyone, and the room state lists monitors separately (`monitors`, `counts.monitors`). Monitors are not counted in "in the room".
+
+Monitoring is never allowed by default. Grant it with a Gate:
+
+```php
+use daacreators\CreatorsAudioRooms\Support\ParticipantIdentity;
+use Illuminate\Support\Facades\Gate;
+
+Gate::define('audio-rooms.monitor', fn ($user, ParticipantIdentity $participant) => $user?->is_admin === true);
+```
+
+or answer `RoomAction::Monitor` in your own `Authorizer`.
+
 ### Audiences
 
 Limit a room to a team, community or event by storing an opaque audience on it (`audience_type`, `audience_ref`) and answering one question:
@@ -418,6 +439,7 @@ No queue worker is needed.
 - **Speaking.** Nobody becomes a speaker without agreeing to it. Listeners raise a hand and a host approves, or a host invites a listener, who then accepts or declines; a host can withdraw an invitation that has not been answered. Microphones always start off, and only the participant can turn theirs on.
 - **Muting.** A host can mute a speaker. That speaker cannot unmute until a host allows it, and even then only the speaker can turn the microphone back on. A microphone is never switched on remotely.
 - **Hosts.** A room has at most two hosts (host and co-host). Co-hosts cannot act on the host. When the host leaves, the longest-present co-host becomes host. A live room with no host ends after `host_absent_grace_seconds` (2 minutes by default).
+- **Monitoring.** Participants your app allows to monitor can join any room without taking a listener place, moderate everyone in it, and are always shown to the room (see [Monitoring](#monitoring)).
 - **Removing and banning.** Removed participants cannot rejoin that room. Banned participants are blocked from it permanently, or for every room in the tenant with a tenant-wide ban.
 - **Simultaneous actions.** Changes run in database transactions with the room locked. Two hosts acting at once never break the limits; the second gets a clear "already changed" response.
 - **Retention.** Rooms that never started expire after 24 hours. Ended rooms are deleted after 30 days (`lifecycle` config).

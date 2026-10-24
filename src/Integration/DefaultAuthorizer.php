@@ -15,7 +15,8 @@ use Illuminate\Support\Facades\Gate;
  *   It runs for the signed-in user: fn ($user, ParticipantIdentity $participant, ?Room $room).
  * - Otherwise any signed-in participant may create, discover, join and ask
  *   to speak; moderation actions are left to the package's room rules
- *   (only the room's hosts can moderate their own room).
+ *   (only the room's hosts can moderate their own room). Monitoring is never
+ *   allowed unless an "audio-rooms.monitor" gate grants it.
  *
  * Replace it in config to map your own permissions.
  */
@@ -29,6 +30,7 @@ class DefaultAuthorizer implements Authorizer
             return Gate::allows($ability, [$participant, $room]);
         }
 
-        return true;
+        // Monitoring bypasses room limits and lets someone moderate any room: only when the app grants it.
+        return $action !== RoomAction::Monitor;
     }
 }

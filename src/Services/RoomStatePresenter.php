@@ -65,7 +65,7 @@ class RoomStatePresenter
         // People who closed the page without leaving are only counted until they time out.
         $rooms->filter(fn (Room $room) => $room->isLive())->each(fn (Room $room) => $this->manager()->tidy($room));
         $rooms->loadCount([
-            'activeMembers as people_count',
+            'activeMembers as people_count' => fn ($q) => $q->where('role', '!=', RoomRole::Monitor->value),
             'activeMembers as listeners_count' => fn ($q) => $q->where('role', RoomRole::Listener->value),
         ]);
         // The host (present or not) and whoever is speaking right now, for the list cards.
@@ -134,6 +134,8 @@ class RoomStatePresenter
             'hosts' => $byRole(RoomRole::Host, RoomRole::CoHost),
             'speakers' => $byRole(RoomRole::Speaker),
             'listeners' => $byRole(RoomRole::Listener),
+            // Monitors are shown to everyone, so a room always knows it is being monitored.
+            'monitors' => $byRole(RoomRole::Monitor),
             // Everyone sees that hands are raised; only moderators get the actionable queue order.
             'requests' => $isModerator ? $requests : [],
             'counts' => [
@@ -141,7 +143,8 @@ class RoomStatePresenter
                 'voices' => count($byRole(RoomRole::Host, RoomRole::CoHost, RoomRole::Speaker)),
                 'listeners' => count($byRole(RoomRole::Listener)),
                 'requests' => count($requests),
-                'people' => $public->count(),
+                'monitors' => count($byRole(RoomRole::Monitor)),
+                'people' => $public->filter(fn ($m) => $m['role'] !== RoomRole::Monitor->value)->count(),
             ],
             'me' => $me ? [
                 'key' => $me->participant_key,
@@ -157,6 +160,7 @@ class RoomStatePresenter
                 'start' => $me !== null && $me->role->isHost() && ! $room->isLive() && ! $room->isEnded(),
                 'end' => $isModerator && ! $room->isEnded()
                     && $this->authorizer->allows($viewer, RoomAction::End, $room),
+                'monitor' => ($me === null || ! $me->role->canSpeak()) && $this->access->canMonitor($viewer, $room),
                 'request_to_speak' => $me?->state === MemberState::Joined
                     && $me->role === RoomRole::Listener
                     && $this->access->canRequestToSpeak($viewer, $room),

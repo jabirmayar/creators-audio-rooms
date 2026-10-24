@@ -24,11 +24,12 @@
         alert: svg('<path d="M10.3 4.1L2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 4.1a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4M12 17h.01"/>'),
         leave: svg('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'),
         play: svg('<path d="M8 5v14l11-7z"/>', 'currentColor'),
+        eye: svg('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
     };
     /** Animated "talking" bars shown on someone's face while they speak. */
     const SPEAKING_BARS = '<span class="car-icon-badge car-icon-badge--speaking" aria-hidden="true"><i></i><i></i><i></i></span>';
 
-    const ROLE_SPEAKS = { host: true, co_host: true, speaker: true, listener: false };
+    const ROLE_SPEAKS = { host: true, co_host: true, speaker: true, listener: false, monitor: false };
 
     function esc(value) {
         return String(value == null ? '' : value)
@@ -237,7 +238,7 @@
             }, document.hidden ? 15000 : 6000);
         }
 
-        async join() {
+        async join(asMonitor) {
             if (this.status === 'joining') return;
             this.status = 'joining';
             this.notice = null;
@@ -245,12 +246,18 @@
             this.unlockAudio();
 
             try {
-                const data = await this.api.request('POST', '/join', {});
+                this.asMonitor = Boolean(asMonitor);
+                const data = await this.api.request('POST', '/join', this.joinBody());
                 this.onJoined(data);
             } catch (e) {
                 this.status = 'idle';
                 this.handleError(e);
             }
+        }
+
+        /** Re-joins (after a lapsed session) use the same way the person first joined. */
+        joinBody() {
+            return this.asMonitor ? { as: 'monitor' } : {};
         }
 
         onJoined(data) {
@@ -372,7 +379,7 @@
             }
             if (e.code === 'session_expired' || e.code === 'not_a_member') {
                 // Rejoin quietly: same member row, same role, new connection.
-                try { this.onJoined(await this.api.request('POST', '/join', {})); } catch (err) { this.handleError(err); }
+                try { this.onJoined(await this.api.request('POST', '/join', this.joinBody())); } catch (err) { this.handleError(err); }
                 return;
             }
             if (e.code === 'too_many_requests') {
@@ -404,7 +411,7 @@
             }
             if ((code === 'session_expired' || code === 'not_a_member') && this.joined) {
                 // The room session lapsed during an action: reconnect quietly.
-                this.api.request('POST', '/join', {}).then((data) => this.onJoined(data), (err) => {
+                this.api.request('POST', '/join', this.joinBody()).then((data) => this.onJoined(data), (err) => {
                     if (err.code !== code) this.handleError(err);
                 });
                 return;
@@ -593,7 +600,7 @@
 
         members() {
             if (!this.state) return [];
-            return [].concat(this.state.hosts || [], this.state.speakers || [], this.state.listeners || []);
+            return [].concat(this.state.hosts || [], this.state.speakers || [], this.state.listeners || [], this.state.monitors || []);
         }
 
         /**
@@ -1009,7 +1016,8 @@
             const name = button.getAttribute('data-name') || '';
 
             switch (action) {
-                case 'join': return this.join();
+                case 'join': return this.join(false);
+                case 'join-monitor': return this.join(true);
                 case 'leave': return this.leave(false);
                 case 'start':
                     this.unlockAudio();
@@ -1171,6 +1179,7 @@
                     (meta.length ? '<div class="car-meta car-meta--dots">' + meta.join('') + '</div>' : '') +
                 '</div>' + statusBadge + '</div>' +
                 (room.description ? '<p class="car-description">' + esc(room.description) + '</p>' : '') +
+                this.renderMonitorNote() +
                 '</header>' +
                 this.renderBanner() +
                 this.renderInvitation() +
@@ -1232,6 +1241,15 @@
                 parts.push(this.banner(this.notice.kind, this.notice.text, '<div class="car-banner-actions">' + actions.join('') + '</div>'));
             }
             return parts.join('');
+        }
+
+        /** "Monitored by …": monitoring is never hidden from the room. */
+        renderMonitorNote() {
+            const monitors = this.state.monitors || [];
+            if (!monitors.length) return '';
+            const names = monitors.slice(0, 2).map((m) => (this.state.me && m.key === this.state.me.key) ? this.tr('you') : m.name);
+            if (monitors.length > 2) names.push('+' + (monitors.length - 2));
+            return '<p class="car-monitor-note">' + ICONS.eye + '<span>' + esc(this.tr('monitored_by', { names: names.join(', ') })) + '</span></p>';
         }
 
         /** Shown to a listener a host invited to speak; nothing changes until they accept. */
@@ -1302,7 +1320,7 @@
             if (m.hand_raised) badges.push('<span class="car-icon-badge car-icon-badge--hand" title="' + esc(this.tr('hand_raised')) + '">' + ICONS.hand + '</span>');
             else if (m.invited) badges.push('<span class="car-icon-badge car-icon-badge--invite" title="' + esc(this.tr('invited_badge')) + '">' + ICONS.sparkle + '</span>');
 
-            const canAct = s.can.moderate && !isMe && !(m.role === 'host' && me.role !== 'host');
+            const canAct = s.can.moderate && !isMe && m.role !== 'monitor' && !(m.role === 'host' && !['host', 'monitor'].includes(me.role));
             const states = [m.hand_raised ? this.tr('hand_raised') : (m.invited ? this.tr('invited_badge') : '')].filter(Boolean);
             const label = esc(m.name) + (isMe ? ' (' + esc(this.tr('you')) + ')' : '') + (roleLabel ? ', ' + esc(roleLabel) : '') + (states.length ? ', ' + esc(states.join(', ')) : '');
             // Moderators open the member menu from the card (it has a "View profile" item); others get a plain link.
@@ -1338,10 +1356,11 @@
                 else if (s.counts.voices < s.room.limits.speakers) items.push(btn(m.hand_raised ? 'approve_speaker' : 'invite_speaker'));
                 if (m.hand_raised) items.push(btn('decline_request'));
             }
-            if (ROLE_SPEAKS[m.role] && m.role !== 'host') {
+            const actingAsMonitor = s.me && s.me.role === 'monitor';
+            if (ROLE_SPEAKS[m.role] && (m.role !== 'host' || actingAsMonitor)) {
                 if (!m.moderator_muted) items.push(btn('mute')); else items.push(btn('allow_unmute'));
-                items.push(btn('demote'));
             }
+            if (ROLE_SPEAKS[m.role] && m.role !== 'host') items.push(btn('demote'));
             if (m.role !== 'co_host' && m.role !== 'host' && s.counts.hosts < s.room.limits.hosts) items.push(btn('make_co_host'));
             items.push('<div class="car-menu-sep" role="separator"></div>');
             items.push(btn('remove', 'is-danger'));
@@ -1359,11 +1378,22 @@
                 if (room.status === 'ended' || ['removed', 'replaced', 'signed_out'].includes(this.status)) return '';
                 const isHost = me && (me.role === 'host' || me.role === 'co_host');
                 // Without WebRTC there is nothing to join; the notice explains why.
-                if (!window.RTCPeerConnection || !(room.status === 'live' || isHost)) return '';
-                out.push('<button type="button" class="car-btn car-btn--primary car-btn--wide" data-action="join"' + (this.status === 'joining' ? ' disabled' : '') + '>' + ICONS.headphones +
-                    esc(this.status === 'joining' ? this.tr('joining') : (room.status === 'live' ? this.tr('join') : this.tr('join_as_host'))) + '</button>');
+                const canMonitor = Boolean(s.can.monitor);
+                if (!window.RTCPeerConnection || !(room.status === 'live' || isHost || canMonitor)) return '';
+                const busy = this.status === 'joining';
+                // People who already hold a role (or monitor) always get back in; listener places can run out.
+                const full = !isHost && !(me && ['speaker', 'monitor'].includes(me.role)) && s.counts.listeners >= room.limits.listeners;
+                if (room.status === 'live' || isHost) {
+                    out.push('<button type="button" class="car-btn car-btn--primary car-btn--wide" data-action="join"' + (busy || full ? ' disabled' : '') + '>' + ICONS.headphones +
+                        esc(busy ? this.tr('joining') : (room.status === 'live' ? this.tr('join') : this.tr('join_as_host'))) + '</button>');
+                }
+                if (canMonitor && !isHost) {
+                    out.push('<button type="button" class="car-btn' + (full || room.status !== 'live' ? ' car-btn--primary' : '') + '" data-action="join-monitor"' + (busy ? ' disabled' : '') + '>' + ICONS.eye + esc(this.tr('join_as_monitor')) + '</button>');
+                }
                 const hints = [];
-                if (!isHost) hints.push(this.tr('join_hint'));
+                if (full) hints.push(this.tr('room_full_hint'));
+                if (canMonitor && !isHost) hints.push(this.tr('monitor_hint'));
+                else if (!isHost && !full) hints.push(this.tr('join_hint'));
                 // Phones may pause audio in the background; only worth saying on touch devices.
                 const touch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
                 if (touch && this.config.background_note !== false) hints.push(this.tr('background_note'));
@@ -1379,6 +1409,7 @@
                 out.push('<button type="button" class="car-btn car-btn--hand' + (me.hand_raised ? ' car-btn--primary is-raised' : '') + '" data-action="hand" aria-pressed="' + Boolean(me.hand_raised) + '">' + ICONS.hand +
                     '<span>' + esc(this.tr(me.hand_raised ? 'lower_hand' : 'raise_hand')) + '</span></button>');
             }
+            if (me && me.role === 'monitor') out.push('<span class="car-chip car-chip--monitor">' + ICONS.eye + esc(this.tr('monitoring')) + '</span>');
             if (s.can.start) out.push('<button type="button" class="car-btn car-btn--primary" data-action="start">' + esc(this.tr('start')) + '</button>');
             const waiting = (s.requests || []).length;
             if (s.can.moderate && waiting) {

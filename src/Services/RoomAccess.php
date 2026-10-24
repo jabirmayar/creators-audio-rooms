@@ -83,6 +83,25 @@ class RoomAccess
         }
     }
 
+    /** May this participant monitor the room (oversight: no listener place, can moderate everyone)? */
+    public function canMonitor(ParticipantIdentity $who, Room $room): bool
+    {
+        return ! $room->isEnded()
+            && $this->canView($who, $room)
+            && $this->authorizer->allows($who, RoomAction::Monitor, $room);
+    }
+
+    public function ensureCanMonitor(ParticipantIdentity $who, Room $room): void
+    {
+        $this->ensureCanView($who, $room);
+        if ($room->isEnded()) {
+            throw RoomActionDenied::because('room_ended', 409);
+        }
+        if (! $this->authorizer->allows($who, RoomAction::Monitor, $room)) {
+            throw RoomActionDenied::because('not_allowed');
+        }
+    }
+
     public function ensureCanJoin(ParticipantIdentity $who, Room $room): void
     {
         $this->ensureCanView($who, $room);

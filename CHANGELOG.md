@@ -2,6 +2,19 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.3.0 - 2026-10-24
+
+### Added
+
+- Monitoring: participants the app allows (`RoomAction::Monitor`, never granted by default; e.g. an `audio-rooms.monitor` gate) can **Join as monitor**. Monitors get in even when the room is full, are not blocked by a room-level removal or ban, hear the room without speaking, and can moderate everyone including the host. Hosts cannot act on monitors.
+- Monitoring is always visible: rooms show "Monitored by …", and the room state includes `monitors`, `counts.monitors` and `can.monitor`.
+- `POST /api/rooms/{room}/join` accepts `as=monitor`.
+- When every listener place is taken, the join button is disabled with an explanation instead of failing after a click.
+
+### Changed
+
+- `RoomRole::canSpeak()` now lists the speaking roles explicitly (host, co-host, speaker).
+
 ## 1.2.0 - 2026-10-24
 
 ### Changed

@@ -162,16 +162,21 @@ class RoomManager
      * role, so reconnects never duplicate people or change roles; the new
      * connection replaces any older one.
      *
+     * $asMonitor: join for oversight (requires the Monitor permission). Monitors
+     * do not take a listener place, are not blocked by a room-level removal or
+     * ban, and are shown to everyone in the room.
+     *
      * @return array{member: Member, token: SessionToken, rejoined: bool}
      */
-    public function join(ParticipantIdentity $who, Room $room): array
+    public function join(ParticipantIdentity $who, Room $room, bool $asMonitor = false): array
     {
-        $this->access->ensureCanJoin($who, $room);
+        $check = fn (Room $room) => $asMonitor ? $this->access->ensureCanMonitor($who, $room) : $this->access->ensureCanJoin($who, $room);
+        $check($room);
         $rejoined = false;
 
-        $member = $this->locked($room, function (Room $room) use ($who, &$rejoined) {
+        $member = $this->locked($room, function (Room $room) use ($who, $asMonitor, $check, &$rejoined) {
             // Re-check inside the lock: the room may have ended, or a ban landed, meanwhile.
-            $this->access->ensureCanJoin($who, $room);
+            $check($room);
 
             $member = $this->access->member($who, $room);
             $rejoined = $member !== null && $member->joined_at !== null;
@@ -181,8 +186,13 @@ class RoomManager
                 $member = new Member([
                     'room_id' => $room->id,
                     'participant_key' => $who->key,
-                    'role' => RoomRole::Listener,
+                    'role' => $asMonitor ? RoomRole::Monitor : RoomRole::Listener,
                 ]);
+            } elseif ($asMonitor && ! $member->role->canSpeak()) {
+                // A listener (or someone removed earlier) switching to monitoring; speakers keep their role.
+                $member->role = RoomRole::Monitor;
+                $member->hand_raised_at = null;
+                $member->invited_to_speak_at = null;
             }
 
             if (! $wasActive && $member->role === RoomRole::Listener) {
@@ -411,8 +421,11 @@ class RoomManager
             if (! $target || ($target->state !== MemberState::Joined && ! in_array($action, ['ban', 'remove'], true))) {
                 throw RoomActionDenied::because('stale', 409);
             }
-            // Co-hosts cannot act on the host.
-            if ($target->role === RoomRole::Host && $actor->role !== RoomRole::Host) {
+            // Co-hosts cannot act on the host; monitors can. Nobody acts on a monitor.
+            if ($target->role === RoomRole::Host && ! in_array($actor->role, [RoomRole::Host, RoomRole::Monitor], true)) {
+                throw RoomActionDenied::because('not_allowed');
+            }
+            if ($target->role === RoomRole::Monitor) {
                 throw RoomActionDenied::because('not_allowed');
             }
 

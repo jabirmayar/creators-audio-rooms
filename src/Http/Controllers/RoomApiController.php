@@ -92,9 +92,10 @@ class RoomApiController extends Controller
 
     public function join(Request $request, string $room): JsonResponse
     {
+        $data = $request->validate(['as' => ['nullable', 'in:monitor']]);
         $who = $this->who($request);
         $room = $this->viewable($who, $room);
-        $joined = $this->rooms->join($who, $room);
+        $joined = $this->rooms->join($who, $room, ($data['as'] ?? null) === 'monitor');
 
         return response()->json([
             'session' => $joined['token']->encode(),
