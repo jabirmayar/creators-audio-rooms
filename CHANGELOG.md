@@ -4,7 +4,7 @@ All notable changes to this package are documented here. The format follows [Kee
 
 ## 1.0.0 - 2026-10-24
 
-First public release.
+First public release. Supports Laravel 12 (PHP 8.2+) and Laravel 13 (PHP 8.3+).
 
 ### Rooms
 

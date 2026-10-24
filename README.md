@@ -63,7 +63,7 @@ Also keep in mind:
 
 ## Requirements
 
-- PHP 8.2+ and Laravel 11 or 12
+- Laravel 12 (PHP 8.2+) or Laravel 13 (PHP 8.3+)
 - A cache store shared between requests: Redis or Memcached recommended; `database` and `file` work; `array` does not
 - HTTPS in production. Browsers only allow microphones on secure pages; `localhost` counts as secure during development.
 - A modern browser (see [Browser support](#browser-support))
