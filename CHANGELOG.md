@@ -2,6 +2,12 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.1.1 - 2026-10-24
+
+### Fixed
+
+- `creators-audio-rooms:install --force` no longer overwrites an existing `config/creators-audio-rooms.php`. The install command always refreshes the browser assets and keeps your config; use `--reset-config` to replace it with the package default.
+
 ## 1.1.0 - 2026-10-24
 
 ### Changed

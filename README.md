@@ -381,7 +381,7 @@ All events are in `daacreators\CreatorsAudioRooms\Events` and carry the `$room`.
 
 | Command | Purpose |
 |---|---|
-| `creators-audio-rooms:install` | Publish config and assets (`--migrate`, `--force`) |
+| `creators-audio-rooms:install` | Publish the config (only if missing; `--reset-config` replaces it) and refresh the browser assets (`--migrate`) |
 | `creators-audio-rooms:doctor` | Check the setup without showing secrets |
 | `creators-audio-rooms:prune` | Disconnect stale participants, end abandoned rooms, delete old ones |
 | `creators-audio-rooms:forget {key}` | Anonymise a participant |
@@ -454,7 +454,7 @@ Current versions of Chrome, Edge, Firefox and Safari on desktop, and Chrome and 
 ```bash
 composer update daacreators/creators-audio-rooms
 php artisan migrate
-php artisan creators-audio-rooms:install --force   # refresh browser assets
+php artisan creators-audio-rooms:install   # refresh browser assets; your config is kept
 php artisan creators-audio-rooms:doctor
 ```
 
@@ -467,7 +467,7 @@ Migrations are additive and versioned.
 | "Microphone access was blocked" | The site's microphone permission in the browser, and that the page is HTTPS |
 | Participants never connect | Run `doctor`; make sure the cache is shared (not `array`) and that users are not on a network that blocks peer-to-peer traffic (add a TURN server) |
 | Room shows "Connection lost" | The app is unreachable or slow; the room retries on its own |
-| Old assets after upgrading | `php artisan creators-audio-rooms:install --force` |
+| Old assets after upgrading | `php artisan creators-audio-rooms:install` |
 | "Too many requests" | Raise `rate_limits` if your rooms are busier than the defaults assume |
 
 ## Testing
