@@ -221,6 +221,11 @@ a.car-person-name:hover { text-decoration: underline; }
 .car-icon-badge--hand { background: #f59e0b; }
 .car-icon-badge--hand svg { transform-origin: 60% 85%; animation: car-wave 2.4s ease-in-out infinite; }
 .car-icon-badge--invite { background: var(--car-accent); }
+/* Audio link state (top end of the face). */
+.car-icon-badge--link { inset-inline-end: -3px; inset-inline-start: auto; top: -3px; bottom: auto; }
+.car-icon-badge--linking { background: #64748b; }
+.car-icon-badge--linking i { display: block; width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgb(255 255 255 / .35); border-top-color: #fff; animation: car-spin .8s linear infinite; }
+.car-icon-badge--unreachable { background: var(--car-danger); }
 .car-icon-badge--invite svg { width: 17px; height: 17px; stroke-width: 2.2; }
 /* Sound waves ripple out from the microphone on invitations. */
 .car-wave { opacity: .35; animation: car-wave-out 1.6s ease-in-out infinite; }
@@ -231,6 +236,13 @@ a.car-person-name:hover { text-decoration: underline; }
 .car-icon-badge--speaking i:nth-child(2) { animation-delay: -.3s; }
 .car-icon-badge--speaking i:nth-child(3) { animation-delay: -.6s; }
 .car-person.is-speaking .car-icon-badge--speaking { display: grid; }
+
+/* Connection details */
+.car-diag { margin-top: 18px; padding: 12px 14px; border-radius: 12px; background: var(--car-surface); border: 1px solid var(--car-border); font-size: .76rem; line-height: 1.5; color: var(--car-muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+.car-diag-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 6px; font-weight: 700; color: var(--car-text); }
+.car-diag-row + .car-diag-row { margin-top: 4px; }
+.car-diag strong { color: var(--car-text); }
+.car-diag-ua { margin-top: 8px; opacity: .7; }
 
 /* Member actions (moderators) */
 .car-person-menu { position: absolute; inset: 0; border: 0; background: transparent; cursor: pointer; border-radius: 12px; }

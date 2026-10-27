@@ -120,6 +120,7 @@ class RoomApiController extends Controller
             'cursor' => $this->signals->cursor($room->id, $who->key),
             'rejoined' => $joined['rejoined'],
             'ice_servers' => $this->iceServers->forParticipant($who),
+            'ice_transport_policy' => config('creators-audio-rooms.ice_transport_policy', 'all') === 'relay' ? 'relay' : 'all',
             'audio' => ['max_bitrate' => (int) config('creators-audio-rooms.audio.max_bitrate', 32000)],
             'intervals' => [
                 'active' => (int) config('creators-audio-rooms.signaling.sync_interval_ms'),

@@ -2,6 +2,21 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.6.0 - 2026-10-27
+
+### Added
+
+- Connection watchdog: links that do not connect within 15 seconds are restarted, then rebuilt from scratch (either side can ask for a fresh link), up to three attempts. After that the room says who could not be reached, with a **Retry** button, and tells moderators when no relay server is configured.
+- "Connecting…" and "Not connected" badges on faces while a link is being set up or has failed.
+- **Connection details** panel (`?debug=1`, or the button in a "could not connect" message): link state, route type (`host` / `srflx` / `relay`), candidates gathered, bytes sent and received, and whether STUN answered and a relay is configured.
+- TURN relays with fixed credentials: `AUDIO_ROOMS_TURN_USERNAME` and `AUDIO_ROOMS_TURN_CREDENTIAL`, next to the existing shared-secret mode.
+- `ice_transport_policy` (`AUDIO_ROOMS_ICE_POLICY=relay`) to force every connection through the relay.
+
+### Fixed
+
+- A link closed by the other side is now rebuilt right away instead of waiting for the next room change.
+- Connections that stayed in "checking" or "disconnected" without ever failing were never retried.
+
 ## 1.5.2 - 2026-10-24
 
 ### Changed

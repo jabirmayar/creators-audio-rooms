@@ -22,6 +22,9 @@ class IceServers
         $urls = array_values(array_filter((array) ($turn['urls'] ?? [])));
         $secret = (string) ($turn['secret'] ?? '');
 
+        $username = (string) ($turn['username'] ?? '');
+        $credential = (string) ($turn['credential'] ?? '');
+
         if ($urls !== [] && $secret !== '') {
             $ttl = max(300, (int) ($turn['ttl_seconds'] ?? 3600));
             // "expiry:label"; the label is a hash so no participant identifier is exposed to the TURN server.
@@ -31,15 +34,33 @@ class IceServers
                 'username' => $username,
                 'credential' => base64_encode(hash_hmac('sha1', $username, $secret, true)),
             ];
+        } elseif ($urls !== [] && $username !== '' && $credential !== '') {
+            // Fixed credentials from a hosted provider.
+            $servers[] = ['urls' => $urls, 'username' => $username, 'credential' => $credential];
         }
 
         return $servers;
     }
 
-    /** Is a TURN relay configured (with short-lived credentials)? */
+    /** Is a TURN relay configured (through 'turn', or a turn: entry in 'ice_servers')? */
     public static function hasTurn(): bool
     {
-        return array_filter((array) config('creators-audio-rooms.turn.urls', [])) !== []
-            && (string) config('creators-audio-rooms.turn.secret', '') !== '';
+        $turn = (array) config('creators-audio-rooms.turn', []);
+        $configured = array_filter((array) ($turn['urls'] ?? [])) !== []
+            && ((string) ($turn['secret'] ?? '') !== ''
+                || ((string) ($turn['username'] ?? '') !== '' && (string) ($turn['credential'] ?? '') !== ''));
+        if ($configured) {
+            return true;
+        }
+
+        foreach ((array) config('creators-audio-rooms.ice_servers', []) as $server) {
+            foreach ((array) ($server['urls'] ?? []) as $url) {
+                if (str_starts_with((string) $url, 'turn')) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 }

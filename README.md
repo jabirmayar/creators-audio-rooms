@@ -78,7 +78,7 @@ Each speaker's audio is capped at 32 kbps per connection (`audio.max_bitrate`), 
 
 Also keep in mind:
 
-- **Strict networks.** Without a TURN relay, a minority of participants on very restrictive networks (some corporate, public Wi-Fi or mobile networks) cannot connect. They see a clear message. Add a [TURN relay](#turn-relay) to reach them.
+- **Strict networks.** Without a TURN relay, people on mobile networks and many campus or corporate Wi-Fi networks cannot connect to each other: the room works but they hear nothing. The room tells them and retries, but only a [TURN relay](#turn-relay) fixes it.
 - **Update delay.** Changes such as a hand raise reach others within about one to two seconds. Audio itself is real time.
 - **Phones in the background.** Mobile browsers, iOS Safari in particular, may pause audio when the screen locks or the browser goes to the background. The room resumes when the page is visible again and offers a one-tap "turn on room audio" button when the browser requires it.
 
@@ -174,16 +174,30 @@ $room = app(RoomManager::class)->create($participant, [
 
 ### TURN relay
 
-Most participants connect directly with the default public STUN servers. On strict networks (some offices, public Wi-Fi and mobile carriers) a direct route is impossible and audio needs a TURN relay. Any TURN server that supports the shared-secret scheme works, for example [coturn](https://github.com/coturn/coturn) with `use-auth-secret` or a hosted TURN provider:
+Public STUN servers let browsers find a direct route to each other, which works on most home and office networks. It does **not** work when both people are behind carrier-grade NAT or a strict firewall, which is normal on **mobile networks** and common on campus or corporate Wi-Fi. In that case the room looks fine (people join, hands are raised, the microphone animates), but no audio reaches the other side. A TURN relay fixes this: it forwards the audio when no direct route exists. Treat it as required before real use.
+
+Any TURN server works. Hosted options include Cloudflare's TURN service, Metered, Twilio and Xirsys; or run [coturn](https://github.com/coturn/coturn) yourself. Two ways to configure it:
+
+**Fixed credentials** (what most hosted providers give you):
+
+```dotenv
+AUDIO_ROOMS_TURN_URLS="turn:relay.example.com:3478,turn:relay.example.com:443?transport=tcp,turns:relay.example.com:443"
+AUDIO_ROOMS_TURN_USERNAME="your-username"
+AUDIO_ROOMS_TURN_CREDENTIAL="your-credential"
+```
+
+**Shared secret** (coturn `use-auth-secret` and providers that support it): each browser gets its own short-lived credentials when it joins, valid for `turn.ttl_seconds` (one hour by default). The secret never leaves your server, and the TURN username contains an expiry time and a hash rather than a user id.
 
 ```dotenv
 AUDIO_ROOMS_TURN_URLS="turn:turn.example.com:3478,turns:turn.example.com:5349"
 AUDIO_ROOMS_TURN_SECRET="the-same-secret-as-your-turn-server"
 ```
 
-Each browser receives its own credentials when it joins, valid for `turn.ttl_seconds` (one hour by default). The secret never leaves your server, and the TURN username contains an expiry time and a hash rather than a user id. `doctor` reports whether a relay is configured.
+Include a `turn:…:443?transport=tcp` or `turns:…:443` URL so networks that only allow web traffic can still reach the relay. `php artisan creators-audio-rooms:doctor` reports whether a relay is configured. Set `AUDIO_ROOMS_ICE_POLICY=relay` to force every connection through the relay, which also hides participants' IP addresses from each other.
 
-Static TURN credentials can still be listed in `ice_servers` if your provider issues them that way.
+### Checking a connection
+
+Open a room with `?debug=1` on the URL (or press **Connection details** in a "could not connect" message) to see, per participant, the link state, how the link was made (`host`, `srflx` or `relay`), the candidates gathered, bytes sent and received, and whether a relay is configured. When people cannot hear each other, this shows whether STUN answered and whether a relay was available.
 
 ### Request load
 
@@ -548,7 +562,8 @@ Migrations are additive and versioned.
 | Symptom | Check |
 |---|---|
 | "Microphone access was blocked" | The site's microphone permission in the browser, and that the page is HTTPS |
-| Participants never connect | Run `doctor`; make sure the cache is shared (not `array`) and that users are not on a network that blocks peer-to-peer traffic (add a TURN server) |
+| People join but hear nothing | Almost always no TURN relay: configure one (see [TURN relay](#turn-relay)). Open the room with `?debug=1` to confirm; `relay: not configured` plus links stuck on "Connecting…" means exactly that |
+| Participants never connect | Run `doctor`; make sure the cache is shared (not `array`) |
 | Room shows "Connection lost" | The app is unreachable or slow; the room retries on its own |
 | Old assets after upgrading | `php artisan creators-audio-rooms:install` |
 | "Too many requests" | Raise `rate_limits` if your rooms are busier than the defaults assume |

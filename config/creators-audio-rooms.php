@@ -139,9 +139,20 @@ return [
     */
     'turn' => [
         'urls' => array_filter(explode(',', (string) env('AUDIO_ROOMS_TURN_URLS', ''))),
+        // Either a shared secret (coturn "use-auth-secret": short-lived credentials are generated per join)…
         'secret' => env('AUDIO_ROOMS_TURN_SECRET'),
         'ttl_seconds' => 3600,
+        // …or a fixed username and credential, as most hosted TURN providers issue.
+        'username' => env('AUDIO_ROOMS_TURN_USERNAME'),
+        'credential' => env('AUDIO_ROOMS_TURN_CREDENTIAL'),
     ],
+
+    /*
+    | 'all' lets browsers connect directly when they can and fall back to the
+    | relay; 'relay' forces every connection through the TURN relay (hides
+    | participants' IP addresses from each other; needs a relay).
+    */
+    'ice_transport_policy' => env('AUDIO_ROOMS_ICE_POLICY', 'all'),
 
     /*
     | Audio sent by each speaker. A cap keeps uploads small when one speaker

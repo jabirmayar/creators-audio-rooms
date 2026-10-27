@@ -38,6 +38,31 @@ class NetworkingTest extends ApiTestCase
         $this->assertSame(config('creators-audio-rooms.ice_servers'), $servers);
     }
 
+    public function test_fixed_turn_credentials_are_sent_as_given(): void
+    {
+        config([
+            'creators-audio-rooms.turn.urls' => ['turn:relay.example.test:443?transport=tcp'],
+            'creators-audio-rooms.turn.secret' => null,
+            'creators-audio-rooms.turn.username' => 'relay-user',
+            'creators-audio-rooms.turn.credential' => 'relay-pass',
+        ]);
+        $roomId = $this->createLiveRoom($this->staff());
+
+        $turn = collect($this->join($this->member(), $roomId)->json('ice_servers'))->firstWhere('username', 'relay-user');
+
+        $this->assertSame('relay-pass', $turn['credential']);
+        $this->assertSame(['turn:relay.example.test:443?transport=tcp'], $turn['urls']);
+    }
+
+    public function test_join_tells_the_browser_the_ice_transport_policy(): void
+    {
+        $roomId = $this->createLiveRoom($this->staff());
+        $this->join($this->member(), $roomId)->assertJsonPath('ice_transport_policy', 'all');
+
+        config(['creators-audio-rooms.ice_transport_policy' => 'relay']);
+        $this->join($this->member(), $roomId)->assertJsonPath('ice_transport_policy', 'relay');
+    }
+
     public function test_join_tells_the_browser_the_audio_bitrate_cap(): void
     {
         config(['creators-audio-rooms.audio.max_bitrate' => 24000]);

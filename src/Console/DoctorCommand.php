@@ -167,7 +167,7 @@ class DoctorCommand extends Command
         if ($urls->isEmpty()) {
             $this->reportWarn('ICE servers', 'none configured; only same-network connections will work');
         } elseif (! $hasTurn) {
-            $this->reportWarn('ICE servers', $urls->count().' STUN, no TURN relay; some strict networks will not connect');
+            $this->reportWarn('ICE servers', $urls->count().' STUN, no TURN relay: people on mobile networks or strict Wi-Fi will not hear each other (see "TURN relay" in the README)');
         } else {
             $this->reportPass('ICE servers', $urls->count().' configured (credentials not shown)');
         }

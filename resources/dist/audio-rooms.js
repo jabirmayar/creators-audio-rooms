@@ -97,6 +97,17 @@
         return ice === 'completed' ? 'connected' : ice === 'checking' ? 'connecting' : ice;
     }
 
+    /** host / srflx / relay / prflx, from the candidate object or its SDP line. */
+    function candidateType(candidate) {
+        if (candidate.type) return candidate.type;
+        const m = String(candidate.candidate || '').match(/ typ (\w+)/);
+        return m ? m[1] : '?';
+    }
+
+    function kb(bytes) {
+        return bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' MB' : Math.round(bytes / 1024) + ' KB';
+    }
+
     function sleep(ms) {
         return new Promise((resolve) => setTimeout(resolve, ms));
     }
@@ -179,6 +190,12 @@
             this.maxBitrate = 0;
             this.earlyCandidates = new Map(); // key -> { conn, list } received before the offer
             this.uid = 'car' + (++instances);
+            this.iceTransportPolicy = 'all';
+            this.linkAttempts = new Map();  // key -> fresh connections tried since the last success
+            this.unreachable = new Set();   // keys given up on until Retry
+            this.syncCount = 0;
+            this.showDiag = /[?&]debug=1(&|$)/.test(window.location.search);
+            this.diagTimer = null;
 
             this.el.classList.add('car-root');
             this.applyBranding();
@@ -284,6 +301,9 @@
             this.cursor = data.cursor || 0;
             this.iceServers = data.ice_servers || [];
             this.maxBitrate = (data.audio && data.audio.max_bitrate) || 0;
+            this.iceTransportPolicy = data.ice_transport_policy === 'relay' ? 'relay' : 'all';
+            this.linkAttempts.clear();
+            this.unreachable.clear();
             this.intervals = Object.assign(this.intervals, data.intervals || {});
             this.joined = true;
             this.status = 'connected';
@@ -366,6 +386,8 @@
                     this.touchActivity();
                     await this.onSignal(message);
                 }
+                // Links closed by the other side (or lost offers) are rebuilt here.
+                if (++this.syncCount % 5 === 0) this.reconcilePeers();
             } catch (e) {
                 await this.onSyncError(e);
             } finally {
@@ -653,12 +675,18 @@
         }
 
         newPeer(key, signature) {
-            const pc = new RTCPeerConnection({ iceServers: this.iceServers });
-            const peer = { pc, signature, audio: null, stream: null, pending: [], outbox: [], outboxTimer: null, restarts: 0, remoteSet: false };
+            const config = { iceServers: this.iceServers, bundlePolicy: 'max-bundle' };
+            if (this.iceTransportPolicy === 'relay') config.iceTransportPolicy = 'relay';
+            const pc = new RTCPeerConnection(config);
+            const attempt = (this.linkAttempts.get(key) || 0) + 1;
+            this.linkAttempts.set(key, attempt);
+            const peer = { pc, signature, audio: null, stream: null, pending: [], outbox: [], outboxTimer: null, restarts: 0, remoteSet: false, attempt, candidateTypes: new Set(), watchdog: null, initiator: false };
             this.peers.set(key, peer);
+            this.armWatchdog(key, 15000);
 
             pc.addEventListener('icecandidate', (e) => {
                 if (!e.candidate) return;
+                peer.candidateTypes.add(candidateType(e.candidate));
                 // Candidates arrive in bursts; send them together instead of one request each.
                 peer.outbox.push(e.candidate.toJSON());
                 if (!peer.outboxTimer) peer.outboxTimer = setTimeout(() => this.flushOutbox(key, peer), 150);
@@ -671,6 +699,7 @@
 
         async startPeer(key, signature, conn) {
             const peer = this.newPeer(key, signature);
+            peer.initiator = true;
             peer.conn = conn || null;
             const theySpeak = signature.charAt(1) === 'S';
             const init = { direction: theySpeak ? 'sendrecv' : 'sendonly' };
@@ -704,6 +733,8 @@
                 const existing = this.peers.get(key);
                 const theirs = payload && payload.sig ? payload.sig.split('').reverse().join('') : null;
                 if (existing && (!theirs || existing.signature === theirs)) this.closePeer(key, false);
+                // The other side wants a fresh link (or left): rebuild what is still wanted.
+                setTimeout(() => this.reconcilePeers(), 300);
                 return;
             }
 
@@ -793,19 +824,85 @@
             const peer = this.peers.get(key);
             if (!peer) return;
             const state = linkState(peer.pc);
-            if (state === 'connected') { peer.restarts = 0; peer.failed = false; this.applyBitrate(peer); this.render(); return; }
-            if (state !== 'failed') return;
-
-            const iStart = peer.pc.localDescription && peer.pc.localDescription.type === 'offer';
-            if (iStart && peer.restarts < 2) {
-                peer.restarts++;
-                this.sendOffer(key, peer, true);
+            if (state === 'connected') {
+                clearTimeout(peer.watchdog);
+                peer.restarts = 0;
+                peer.failed = false;
+                this.linkAttempts.set(key, 0);
+                this.unreachable.delete(key);
+                this.applyBitrate(peer);
+                this.render();
                 return;
             }
-            peer.failed = true;
+            // A short drop usually recovers by itself; a long one is handled like a failure.
+            if (state === 'disconnected') { this.armWatchdog(key, 6000); return; }
+            if (state === 'failed') this.recoverLink(key, peer, 'failed');
+        }
+
+        armWatchdog(key, ms) {
+            const peer = this.peers.get(key);
+            if (!peer) return;
+            clearTimeout(peer.watchdog);
+            peer.watchdog = setTimeout(() => {
+                const current = this.peers.get(key);
+                if (current === peer && linkState(peer.pc) !== 'connected') this.recoverLink(key, peer, 'timeout');
+            }, ms);
+        }
+
+        /**
+         * A link did not come up (or dropped). First an ICE restart from the side
+         * that started it, then a brand-new connection (either side can ask for
+         * one by closing its end), up to three fresh attempts.
+         */
+        recoverLink(key, peer, why) {
+            if (this.peers.get(key) !== peer || !this.joined) return;
             const member = this.members().find((m) => m.key === key);
-            this.notice = { kind: 'warn', text: this.tr('cannot_reach', { name: member ? member.name : key }) };
+            const name = member ? member.name : key;
+            console.info('[audio-rooms] link to ' + name + ' ' + why + ' (attempt ' + peer.attempt + ', gathered: ' + (Array.from(peer.candidateTypes).join(',') || 'none') + ', relay configured: ' + (this.hasRelay() ? 'yes' : 'no') + ')');
+
+            if (peer.attempt >= 3) {
+                peer.failed = true;
+                clearTimeout(peer.watchdog);
+                this.unreachable.add(key);
+                const hint = this.state.can.moderate && !this.hasRelay() ? ' ' + this.tr('no_relay_hint') : '';
+                this.notice = { kind: 'warn', text: this.tr('cannot_reach', { name }) + hint, action: 'retry-links' };
+                this.render();
+                return;
+            }
+            if (peer.initiator && peer.restarts < 1) {
+                peer.restarts++;
+                this.sendOffer(key, peer, true);
+                this.armWatchdog(key, 12000);
+                return;
+            }
+            // Start over: close this end (the other side drops its end on the bye) and rebuild.
+            this.closePeer(key, true);
             this.render();
+            setTimeout(() => this.reconcilePeers(), 300);
+        }
+
+        hasRelay() {
+            return (this.iceServers || []).some((s) => [].concat(s.urls || []).some((u) => /^turns?:/i.test(String(u))));
+        }
+
+        /** Try again with everyone that could not be reached. */
+        retryLinks() {
+            this.notice = null;
+            this.unreachable.clear();
+            this.linkAttempts.clear();
+            Array.from(this.peers.entries()).forEach(([key, peer]) => { if (peer.failed || linkState(peer.pc) !== 'connected') this.closePeer(key, true); });
+            this.render();
+            setTimeout(() => this.reconcilePeers(), 300);
+        }
+
+        /** 'ok', 'linking' or 'failed' for a member this browser should have an audio link with; null otherwise. */
+        linkStatus(m) {
+            const me = this.state && this.state.me;
+            if (!this.joined || !me || m.key === me.key) return null;
+            if (!ROLE_SPEAKS[me.role] && !ROLE_SPEAKS[m.role]) return null;
+            const peer = this.peers.get(m.key);
+            if (peer) return peer.failed ? 'failed' : (linkState(peer.pc) === 'connected' ? 'ok' : 'linking');
+            return this.unreachable.has(m.key) ? 'failed' : 'linking';
         }
 
         onRemoteTrack(key, event) {
@@ -878,6 +975,7 @@
             if (!peer) return;
             this.peers.delete(key);
             clearTimeout(peer.outboxTimer);
+            clearTimeout(peer.watchdog);
             try { peer.pc.close(); } catch (e) { /* already closed */ }
             if (peer.audio) { peer.audio.srcObject = null; peer.audio.remove(); }
             if (peer.analyser) peer.analyser.source.disconnect();
@@ -1070,6 +1168,8 @@
                 }
                 case 'unlock-audio': this.unlockAudio(); this.render(); return;
                 case 'reload': window.location.reload(); return;
+                case 'retry-links': return this.retryLinks();
+                case 'diag': this.showDiag = !this.showDiag; this.render(); return;
                 case 'dismiss': this.notice = null; this.render(); return;
                 case 'dialog-confirm': return this.closeDialog(true);
                 case 'dialog-cancel': return this.closeDialog(false);
@@ -1235,7 +1335,7 @@
                 '</header>' +
                 this.renderBanner() +
                 this.renderInvitation() +
-                '<div class="car-body">' + this.renderSections() + '</div>' +
+                '<div class="car-body">' + this.renderSections() + this.renderDiagnostics() + '</div>' +
                 this.renderControls() +
                 (live ? '' : this.liveRegion()) +
                 this.renderDialog();
@@ -1246,6 +1346,13 @@
                 node.classList.toggle('is-speaking', this.speaking.has(node.getAttribute('data-person')));
             });
             this.placeMenu();
+            if (this.showDiag) {
+                this.refreshDiagnostics();
+                if (!this.diagTimer) this.diagTimer = setInterval(() => this.refreshDiagnostics(), 2000);
+            } else if (this.diagTimer) {
+                clearInterval(this.diagTimer);
+                this.diagTimer = null;
+            }
             if (focus && !opening) {
                 const node = this.el.querySelector(focus);
                 if (node) node.focus({ preventScroll: true });
@@ -1283,6 +1390,10 @@
             }
             if (this.notice) {
                 const actions = [];
+                if (this.notice.action === 'retry-links') {
+                    actions.push('<button type="button" class="car-btn car-btn--small car-btn--primary" data-action="retry-links">' + esc(this.tr('retry')) + '</button>');
+                    actions.push('<button type="button" class="car-btn car-btn--small" data-action="diag">' + esc(this.tr('connection_details')) + '</button>');
+                }
                 if (this.notice.action === 'reload') {
                     actions.push('<button type="button" class="car-btn car-btn--small car-btn--primary" data-action="reload">' + esc(this.tr('refresh')) + '</button>');
                 }
@@ -1294,6 +1405,50 @@
                 parts.push(this.banner(this.notice.kind, this.notice.text, '<div class="car-banner-actions">' + actions.join('') + '</div>'));
             }
             return parts.join('');
+        }
+
+        renderDiagnostics() {
+            if (!this.showDiag) return '';
+            return '<section class="car-diag" aria-label="' + esc(this.tr('connection_details')) + '"><p class="car-diag-title">' + esc(this.tr('connection_details')) +
+                ' <button type="button" class="car-btn car-btn--small" data-action="diag">×</button></p><div data-diag-body>…</div></section>';
+        }
+
+        /** Per link: state, route type, candidates gathered and traffic. Refreshed while the panel is open. */
+        async refreshDiagnostics() {
+            const body = this.el.querySelector('[data-diag-body]');
+            if (!body || !this.state) return;
+            let stun = false, relay = false;
+            const rows = [];
+            for (const [key, peer] of Array.from(this.peers.entries())) {
+                const member = this.members().find((m) => m.key === key);
+                const types = Array.from(peer.candidateTypes);
+                if (types.indexOf('srflx') !== -1) stun = true;
+                if (types.indexOf('relay') !== -1) relay = true;
+                let via = '—', inBytes = 0, outBytes = 0;
+                try {
+                    const stats = await peer.pc.getStats();
+                    let pair = null;
+                    stats.forEach((r) => { if (r.type === 'transport' && r.selectedCandidatePairId) pair = stats.get(r.selectedCandidatePairId); });
+                    if (!pair) stats.forEach((r) => { if (r.type === 'candidate-pair' && (r.selected || r.nominated) && r.state === 'succeeded') pair = r; });
+                    if (pair) {
+                        const l = stats.get(pair.localCandidateId), r = stats.get(pair.remoteCandidateId);
+                        via = ((l && l.candidateType) || '?') + ' → ' + ((r && r.candidateType) || '?');
+                    }
+                    stats.forEach((r) => {
+                        if (r.type === 'inbound-rtp' && r.kind === 'audio') inBytes += r.bytesReceived || 0;
+                        if (r.type === 'outbound-rtp' && r.kind === 'audio') outBytes += r.bytesSent || 0;
+                    });
+                } catch (e) { /* stats unavailable */ }
+                rows.push('<div class="car-diag-row"><strong>' + esc(member ? member.name : key) + '</strong> · ' + esc(linkState(peer.pc)) + ' / ice ' + esc(peer.pc.iceConnectionState) +
+                    ' · ' + esc(via) + ' · ' + esc(types.length ? types.join(', ') : this.tr('diag_none_yet')) + ' · ↓' + kb(inBytes) + ' ↑' + kb(outBytes) +
+                    ' · ' + esc(this.tr('diag_attempt', { n: peer.attempt })) + (peer.restarts ? ' +ice' : '') + (peer.initiator ? ' · offer' : ' · answer') + '</div>');
+            }
+            const yes = this.tr('diag_yes'), no = this.tr('diag_no');
+            body.innerHTML = '<div class="car-diag-row">' + esc(this.tr('diag_relay')) + ': <strong>' + esc(this.hasRelay() ? this.tr('diag_configured') : this.tr('diag_not_configured')) + '</strong>' +
+                ' · ' + esc(this.tr('diag_stun')) + ': ' + esc(stun ? yes : no) + ' · ' + esc(this.tr('diag_relay_used')) + ': ' + esc(relay ? yes : no) +
+                ' · policy ' + esc(this.iceTransportPolicy) + '</div>' +
+                (rows.length ? rows.join('') : '<div class="car-diag-row">—</div>') +
+                '<div class="car-diag-row car-diag-ua">' + esc(navigator.userAgent) + '</div>';
         }
 
         /** "Monitored by …": monitoring is never hidden from the room. */
@@ -1370,6 +1525,9 @@
             } else if (speaks) {
                 badges.push(SPEAKING_BARS);
             }
+            const link = this.linkStatus(m);
+            if (link === 'linking') badges.push('<span class="car-icon-badge car-icon-badge--link car-icon-badge--linking" title="' + esc(this.tr('link_connecting')) + '"><i></i></span>');
+            else if (link === 'failed') badges.push('<span class="car-icon-badge car-icon-badge--link car-icon-badge--unreachable" title="' + esc(this.tr('link_failed')) + '">' + ICONS.alert + '</span>');
             if (m.hand_raised) badges.push('<span class="car-icon-badge car-icon-badge--hand" title="' + esc(this.tr('hand_raised')) + '">' + ICONS.hand + '</span>');
             else if (m.invited) badges.push('<span class="car-icon-badge car-icon-badge--invite" title="' + esc(this.tr('invited_badge')) + '">' + ICONS.invite + '</span>');
 
