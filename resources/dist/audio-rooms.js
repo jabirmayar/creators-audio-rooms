@@ -194,7 +194,9 @@
             this.linkAttempts = new Map();  // key -> fresh connections tried since the last success
             this.unreachable = new Set();   // keys given up on until Retry
             this.syncCount = 0;
-            this.showDiag = /[?&]debug=1(&|$)/.test(window.location.search);
+            // Connection details (?debug=1, or the button in a "could not connect" message); off when the app disables diagnostics.
+            this.diagnostics = config.diagnostics !== false;
+            this.showDiag = this.diagnostics && /[?&]debug=1(&|$)/.test(window.location.search);
             this.diagTimer = null;
 
             this.el.classList.add('car-root');
@@ -858,7 +860,7 @@
             if (this.peers.get(key) !== peer || !this.joined) return;
             const member = this.members().find((m) => m.key === key);
             const name = member ? member.name : key;
-            console.info('[audio-rooms] link to ' + name + ' ' + why + ' (attempt ' + peer.attempt + ', gathered: ' + (Array.from(peer.candidateTypes).join(',') || 'none') + ', relay configured: ' + (this.hasRelay() ? 'yes' : 'no') + ')');
+            if (this.diagnostics) console.info('[audio-rooms] link to ' + name + ' ' + why + ' (attempt ' + peer.attempt + ', gathered: ' + (Array.from(peer.candidateTypes).join(',') || 'none') + ', relay configured: ' + (this.hasRelay() ? 'yes' : 'no') + ')');
 
             if (peer.attempt >= 3) {
                 peer.failed = true;
@@ -1169,7 +1171,7 @@
                 case 'unlock-audio': this.unlockAudio(); this.render(); return;
                 case 'reload': window.location.reload(); return;
                 case 'retry-links': return this.retryLinks();
-                case 'diag': this.showDiag = !this.showDiag; this.render(); return;
+                case 'diag': this.showDiag = this.diagnostics && !this.showDiag; this.render(); return;
                 case 'dismiss': this.notice = null; this.render(); return;
                 case 'dialog-confirm': return this.closeDialog(true);
                 case 'dialog-cancel': return this.closeDialog(false);
@@ -1392,7 +1394,7 @@
                 const actions = [];
                 if (this.notice.action === 'retry-links') {
                     actions.push('<button type="button" class="car-btn car-btn--small car-btn--primary" data-action="retry-links">' + esc(this.tr('retry')) + '</button>');
-                    actions.push('<button type="button" class="car-btn car-btn--small" data-action="diag">' + esc(this.tr('connection_details')) + '</button>');
+                    if (this.diagnostics) actions.push('<button type="button" class="car-btn car-btn--small" data-action="diag">' + esc(this.tr('connection_details')) + '</button>');
                 }
                 if (this.notice.action === 'reload') {
                     actions.push('<button type="button" class="car-btn car-btn--small car-btn--primary" data-action="reload">' + esc(this.tr('refresh')) + '</button>');

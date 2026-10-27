@@ -206,7 +206,7 @@ Include a `turn:…:443?transport=tcp` or `turns:…:443` URL so networks that o
 
 ### Checking a connection
 
-Open a room with `?debug=1` on the URL (or press **Connection details** in a "could not connect" message) to see, per participant, the link state, how the link was made (`host`, `srflx` or `relay`), the candidates gathered, bytes sent and received, and whether a relay is configured. When people cannot hear each other, this shows whether STUN answered and whether a relay was available.
+Open a room with `?debug=1` on the URL (or press **Connection details** in a "could not connect" message) to see, per participant, the link state, how the link was made (`host`, `srflx` or `relay`), the candidates gathered, bytes sent and received, and whether a relay is configured. When people cannot hear each other, this shows whether STUN answered and whether a relay was available. Set `AUDIO_ROOMS_DIAGNOSTICS=false` (config `diagnostics`) to hide the panel, the button and the console messages from users.
 
 ### Request load
 

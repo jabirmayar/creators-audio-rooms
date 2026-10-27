@@ -18,6 +18,7 @@
         'csrf' => csrf_token(),
         'labels' => trans('creators-audio-rooms::messages.ui'),
         'branding' => config('creators-audio-rooms.branding'),
+        'diagnostics' => (bool) config('creators-audio-rooms.diagnostics', true),
         'login_url' => \Illuminate\Support\Facades\Route::has((string) config('creators-audio-rooms.routes.login_route', 'login'))
             ? route(config('creators-audio-rooms.routes.login_route', 'login'))
             : null,

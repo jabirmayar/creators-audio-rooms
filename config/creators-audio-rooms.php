@@ -163,6 +163,13 @@ return [
     'ice_transport_policy' => env('AUDIO_ROOMS_ICE_POLICY', 'all'),
 
     /*
+    | Connection details panel (room URL with ?debug=1, or the button in a
+    | "could not connect" message) and connection messages in the browser
+    | console. Useful while setting up; turn off to hide them from users.
+    */
+    'diagnostics' => env('AUDIO_ROOMS_DIAGNOSTICS', true),
+
+    /*
     | Audio sent by each speaker. A cap keeps uploads small when one speaker
     | sends to many listeners (32 kbps Opus is clear for speech).
     */

@@ -2,6 +2,12 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.7.1 - 2026-10-27
+
+### Added
+
+- `diagnostics` config option (`AUDIO_ROOMS_DIAGNOSTICS=false`) hides the connection details panel, its button and the browser console messages.
+
 ## 1.7.0 - 2026-10-27
 
 ### Added
