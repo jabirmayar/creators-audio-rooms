@@ -2,6 +2,22 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.8.0 - 2026-10-27
+
+### Changed
+
+- "Make co-host" now sends an invitation (shown as "Invite as co-host"). The person becomes co-host only when they accept; until then their role does not change. The host can withdraw the invitation, and the host limit is checked again on accepting.
+- A co-host cannot end the room while the host is in it (`host_present`). When the host leaves, the co-host takes over as before and can then end it. Monitors can still end any room.
+
+### Added
+
+- `CoHostInvited` event, and `invited_role` (`speaker` or `co_host`) on members and on `me` in the room state.
+- Migration adding `invited_role` to the members table. Run `php artisan migrate` after updating.
+
+### Fixed
+
+- `RoleChanged` after accepting an invitation now carries who sent the invitation in `byKey`.
+
 ## 1.7.2 - 2026-10-27
 
 ### Fixed

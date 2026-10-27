@@ -520,7 +520,7 @@
             if (before.moderator_muted && !me.moderator_muted) this.announce(this.tr('unmute_allowed'), true);
             if (me.self_muted) this.setTrackEnabled(false);
             // The invitation card itself is visible; screen readers get it announced.
-            if (!before.invited && me.invited) this.announce(this.tr('invitation_title'));
+            if (!before.invited && me.invited) this.announce(this.tr(me.invited_role === 'co_host' ? 'co_host_invitation_title' : 'invitation_title'));
         }
 
         /** Tell moderators when someone new asks to speak (the queue may be scrolled out of view). */
@@ -1462,17 +1462,19 @@
             return '<p class="car-monitor-note">' + ICONS.eye + '<span>' + esc(this.tr('monitored_by', { names: names.join(', ') })) + '</span></p>';
         }
 
-        /** Shown to a listener a host invited to speak; nothing changes until they accept. */
+        /** Shown to someone a host invited to speak or to co-host; nothing changes until they accept. */
         renderInvitation() {
             const me = this.state.me;
-            if (!this.joined || !me || !me.invited || me.role !== 'listener') return '';
+            if (!this.joined || !me || !me.invited) return '';
+            const coHost = me.invited_role === 'co_host';
+            if (coHost ? ['host', 'co_host', 'monitor'].includes(me.role) : me.role !== 'listener') return '';
             const id = this.uid + '-invite';
             return '<div class="car-invite" role="group" aria-labelledby="' + id + '">' +
-                '<span class="car-invite-icon">' + ICONS.invite + '</span><div class="car-invite-text"><p class="car-invite-title" id="' + id + '">' + esc(this.tr('invitation_title')) + '</p>' +
-                '<p class="car-invite-body">' + esc(this.tr('invitation_body')) + '</p></div>' +
+                '<span class="car-invite-icon">' + (coHost ? ICONS.star : ICONS.invite) + '</span><div class="car-invite-text"><p class="car-invite-title" id="' + id + '">' + esc(this.tr(coHost ? 'co_host_invitation_title' : 'invitation_title')) + '</p>' +
+                '<p class="car-invite-body">' + esc(this.tr(coHost ? 'co_host_invitation_body' : 'invitation_body')) + '</p></div>' +
                 '<div class="car-invite-actions">' +
                     '<button type="button" class="car-btn car-btn--small" data-action="invite-decline">' + esc(this.tr('not_now')) + '</button>' +
-                    '<button type="button" class="car-btn car-btn--small car-btn--primary" data-action="invite-accept">' + ICONS.mic + esc(this.tr('accept')) + '</button>' +
+                    '<button type="button" class="car-btn car-btn--small car-btn--primary" data-action="invite-accept">' + (coHost ? ICONS.check : ICONS.mic) + esc(this.tr(coHost ? 'accept_co_host' : 'accept')) + '</button>' +
                 '</div></div>';
         }
 
@@ -1530,11 +1532,12 @@
             const link = this.linkStatus(m);
             if (link === 'linking') badges.push('<span class="car-icon-badge car-icon-badge--link car-icon-badge--linking" title="' + esc(this.tr('link_connecting')) + '"><i></i></span>');
             else if (link === 'failed') badges.push('<span class="car-icon-badge car-icon-badge--link car-icon-badge--unreachable" title="' + esc(this.tr('link_failed')) + '">' + ICONS.alert + '</span>');
+            const invitedLabel = m.invited_role === 'co_host' ? 'co_host_invited_badge' : 'invited_badge';
             if (m.hand_raised) badges.push('<span class="car-icon-badge car-icon-badge--hand" title="' + esc(this.tr('hand_raised')) + '">' + ICONS.hand + '</span>');
-            else if (m.invited) badges.push('<span class="car-icon-badge car-icon-badge--invite" title="' + esc(this.tr('invited_badge')) + '">' + ICONS.invite + '</span>');
+            else if (m.invited) badges.push('<span class="car-icon-badge car-icon-badge--invite" title="' + esc(this.tr(invitedLabel)) + '">' + (m.invited_role === 'co_host' ? ICONS.star : ICONS.invite) + '</span>');
 
             const canAct = s.can.moderate && !isMe && m.role !== 'monitor' && !(m.role === 'host' && !['host', 'monitor'].includes(me.role));
-            const states = [m.hand_raised ? this.tr('hand_raised') : (m.invited ? this.tr('invited_badge') : '')].filter(Boolean);
+            const states = [m.hand_raised ? this.tr('hand_raised') : (m.invited ? this.tr(invitedLabel) : '')].filter(Boolean);
             const label = esc(m.name) + (isMe ? ' (' + esc(this.tr('you')) + ')' : '') + (roleLabel ? ', ' + esc(roleLabel) : '') + (states.length ? ', ' + esc(states.join(', ')) : '');
             // Moderators open the member menu from the card (it has a "View profile" item); others get a plain link.
             const profile = !canAct && !isMe ? safeUrl(m.profile_url) : null;
@@ -1563,10 +1566,11 @@
             const items = [];
             const profile = safeUrl(m.profile_url);
             if (profile) items.push('<a role="menuitem" tabindex="-1" href="' + esc(profile) + '" target="_blank" rel="noopener noreferrer">' + esc(this.tr('view_profile')) + '</a><div class="car-menu-sep" role="separator"></div>');
+            // Any open invitation (to speak or to co-host) can be withdrawn; nobody takes a role without accepting.
+            if (m.invited) items.push(btn('cancel_invite'));
             if (m.role === 'listener') {
                 // A raised hand is consent, so approving promotes; otherwise the listener gets an invitation to accept.
-                if (m.invited) items.push(btn('cancel_invite'));
-                else if (s.counts.voices < s.room.limits.speakers) items.push(btn(m.hand_raised ? 'approve_speaker' : 'invite_speaker'));
+                if (!m.invited && s.counts.voices < s.room.limits.speakers) items.push(btn(m.hand_raised ? 'approve_speaker' : 'invite_speaker'));
                 if (m.hand_raised) items.push(btn('decline_request'));
             }
             const actingAsMonitor = s.me && s.me.role === 'monitor';
@@ -1574,7 +1578,7 @@
                 if (!m.moderator_muted) items.push(btn('mute')); else items.push(btn('allow_unmute'));
             }
             if (ROLE_SPEAKS[m.role] && m.role !== 'host') items.push(btn('demote'));
-            if (m.role !== 'co_host' && m.role !== 'host' && s.counts.hosts < s.room.limits.hosts) items.push(btn('make_co_host'));
+            if (m.role !== 'co_host' && m.role !== 'host' && !m.invited && s.counts.hosts < s.room.limits.hosts) items.push(btn('make_co_host'));
             items.push('<div class="car-menu-sep" role="separator"></div>');
             items.push(btn('remove', 'is-danger'));
             items.push(btn('ban', 'is-danger'));

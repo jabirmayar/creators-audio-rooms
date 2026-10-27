@@ -178,6 +178,7 @@ class RoomStatePresenter
                 'state' => $me->state->value,
                 'hand_raised' => $me->hand_raised_at !== null,
                 'invited' => $me->invited_to_speak_at !== null,
+                'invited_role' => $me->invitedRole(),
                 'moderator_muted' => $me->moderator_muted,
                 'self_muted' => $me->self_muted,
             ] : null,
@@ -185,6 +186,7 @@ class RoomStatePresenter
                 'moderate' => $isModerator,
                 'start' => $me !== null && $me->role->isHost() && ! $room->isLive() && ! $room->isEnded(),
                 'end' => $isModerator && ! $room->isEnded()
+                    && ! ($me->role === RoomRole::CoHost && count($byRole(RoomRole::Host)) > 0)
                     && $this->authorizer->allows($viewer, RoomAction::End, $room),
                 'monitor' => ($me === null || ! $me->role->canSpeak()) && $this->access->canMonitor($viewer, $room),
                 'request_to_speak' => $me?->state === MemberState::Joined

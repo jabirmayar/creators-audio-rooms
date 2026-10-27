@@ -23,7 +23,7 @@ class HostingTest extends ApiTestCase
         $this->api($host, 'POST', '/rooms', ['title' => 'Second'])->assertStatus(409)->assertJson(['error' => 'too_many_rooms']);
 
         $this->join($co, $roomId);
-        $this->moderate($host, $roomId, 'make_co_host', $co)->assertOk();
+        $this->makeCoHost($host, $roomId, $co)->assertOk();
         // Leaving with a co-host present hands the room over.
         $this->api($host, 'POST', "/rooms/{$roomId}/leave")->assertOk();
         $this->sync($co, $roomId)->assertJsonPath('state.me.role', 'host');

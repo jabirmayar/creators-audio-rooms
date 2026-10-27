@@ -114,7 +114,7 @@ class MonitorTest extends ApiTestCase
         // A co-host asking to monitor stays a co-host.
         $co = $this->staff('co@org-a.test');
         $this->join($co, $roomId);
-        $this->moderate($host, $roomId, 'make_co_host', $co)->assertOk();
+        $this->makeCoHost($host, $roomId, $co)->assertOk();
         $this->joinAsMonitor($co, $roomId)->assertOk()->assertJsonPath('state.me.role', 'co_host');
         $this->assertSame(1, Member::where('room_id', $roomId)->where('role', 'monitor')->count());
     }

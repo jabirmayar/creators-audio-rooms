@@ -86,6 +86,14 @@ abstract class ApiTestCase extends TestCase
         return $this->api($who, 'POST', "/rooms/{$roomId}/moderate", ['action' => $action, 'target' => $this->keyOf($target)]);
     }
 
+    /** A host invites someone to co-host and they accept. */
+    protected function makeCoHost(Authenticatable $host, string $roomId, Authenticatable $who): TestResponse
+    {
+        $this->moderate($host, $roomId, 'make_co_host', $who)->assertOk();
+
+        return $this->api($who, 'POST', "/rooms/{$roomId}/invitation", ['accept' => true]);
+    }
+
     /** The consenting path: the listener asks to speak and a moderator approves. */
     protected function makeSpeaker(Authenticatable $moderator, string $roomId, Authenticatable $listener): TestResponse
     {

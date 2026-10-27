@@ -112,7 +112,7 @@ class RoomLifecycleTest extends ApiTestCase
         $co = $this->staff('co@org-a.test');
         $roomId = $this->createLiveRoom($host);
         $this->join($co, $roomId);
-        $this->moderate($host, $roomId, 'make_co_host', $co)->assertOk();
+        $this->makeCoHost($host, $roomId, $co)->assertOk();
 
         $this->api($host, 'POST', "/rooms/{$roomId}/leave")->assertOk();
 

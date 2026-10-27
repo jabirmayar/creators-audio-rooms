@@ -166,7 +166,11 @@ class RoomManager
 
     public function end(ParticipantIdentity $who, Room $room): Room
     {
-        $this->access->ensureModerator($who, $room, RoomAction::End);
+        $actor = $this->access->ensureModerator($who, $room, RoomAction::End);
+        // While the host is in the room, the decision to end it is theirs (monitors keep their oversight).
+        if ($actor->role === RoomRole::CoHost && $room->activeCount(RoomRole::Host) > 0) {
+            throw RoomActionDenied::because('host_present', 409);
+        }
 
         return $this->close($room, 'host', $who->key);
     }
@@ -241,6 +245,7 @@ class RoomManager
                 $member->role = RoomRole::Monitor;
                 $member->hand_raised_at = null;
                 $member->invited_to_speak_at = null;
+                $member->invited_role = null;
             }
 
             if (! $wasActive && $member->role === RoomRole::Listener) {
@@ -484,8 +489,9 @@ class RoomManager
                     ? $this->invite($room, $target, $who->key)
                     : $this->promote($room, $target, RoomRole::Speaker),
                 'invite_speaker' => $this->invite($room, $target, $who->key),
-                'cancel_invite' => $target->forceFill(['invited_to_speak_at' => null, 'invited_by_key' => null])->save(),
-                'make_co_host' => $this->makeCoHost($room, $target),
+                'cancel_invite' => $target->forceFill(['invited_to_speak_at' => null, 'invited_by_key' => null, 'invited_role' => null])->save(),
+                // Nobody becomes co-host without agreeing: they get an invitation to accept.
+                'make_co_host' => $this->inviteCoHost($room, $target, $who->key),
                 'demote' => $this->promote($room, $target, RoomRole::Listener),
                 'decline_request' => $target->forceFill(['hand_raised_at' => null])->save(),
                 'mute' => $target->role->canSpeak()
@@ -502,7 +508,9 @@ class RoomManager
                 $events[] = new Events\ParticipantMuted($room, $target->participant_key, $who->key);
             }
             if ($target->invited_to_speak_at !== null && $target->wasChanged('invited_to_speak_at')) {
-                $events[] = new Events\SpeakerInvited($room, $target->participant_key, $who->key);
+                $events[] = $target->invitedRole() === RoomRole::CoHost->value
+                    ? new Events\CoHostInvited($room, $target->participant_key, $who->key)
+                    : new Events\SpeakerInvited($room, $target->participant_key, $who->key);
             }
             if (in_array($action, ['remove', 'ban'], true)) {
                 $events[] = new Events\ParticipantRemoved($room, $target->participant_key, $who->key, $action === 'ban');
@@ -527,22 +535,36 @@ class RoomManager
         return $target;
     }
 
-    /** A listener answers an invitation to speak. Accepting takes a speaker place if one is free. */
+    /**
+     * Answer an invitation: to speak (listeners) or to become a co-host.
+     * Accepting takes the place if one is still free.
+     */
     public function respondToInvitation(ParticipantIdentity $who, Room $room, bool $accept): Member
     {
         $event = null;
         $member = $this->locked($room, function (Room $room) use ($who, $accept, &$event) {
             $member = $this->access->ensureMember($who, $room);
-            if ($member->invited_to_speak_at === null || $member->role !== RoomRole::Listener) {
+            $kind = $member->invitedRole();
+            $open = match ($kind) {
+                RoomRole::CoHost->value => ! $member->role->isHost() && $member->role !== RoomRole::Monitor,
+                RoomRole::Speaker->value => $member->role === RoomRole::Listener,
+                default => false,
+            };
+            if (! $open) {
                 throw RoomActionDenied::because('no_invitation', 409);
             }
 
+            $byKey = $member->invited_by_key;
             if ($accept) {
-                $this->promote($room, $member, RoomRole::Speaker);
-                $event = new Events\RoleChanged($room, $member->participant_key, RoomRole::Listener->value, RoomRole::Speaker->value, $member->invited_by_key);
+                $from = $member->role;
+                $kind === RoomRole::CoHost->value
+                    ? $this->makeCoHost($room, $member)
+                    : $this->promote($room, $member, RoomRole::Speaker);
+                $event = new Events\RoleChanged($room, $member->participant_key, $from->value, $member->role->value, $byKey);
             }
-            $member->forceFill(['invited_to_speak_at' => null, 'invited_by_key' => null])->save();
-            $this->moderationLog($room, $who->key, null, $accept ? 'invite_accepted' : 'invite_declined');
+            $member->forceFill(['invited_to_speak_at' => null, 'invited_by_key' => null, 'invited_role' => null])->save();
+            $prefix = $kind === RoomRole::CoHost->value ? 'co_host_invite' : 'invite';
+            $this->moderationLog($room, $who->key, null, $prefix.($accept ? '_accepted' : '_declined'));
             $this->touch($room);
 
             return $member;
@@ -574,6 +596,7 @@ class RoomManager
                     'avatar_url' => null,
                     'profile_url' => null,
                     'invited_to_speak_at' => null,
+                    'invited_role' => null,
                     'state' => $member->state === MemberState::Joined ? MemberState::Left : $member->state,
                     'connection_id' => null,
                     'hand_raised_at' => null,
@@ -602,7 +625,7 @@ class RoomManager
         if ($room->activeCount(RoomRole::Host, RoomRole::CoHost, RoomRole::Speaker) >= $room->max_speakers) {
             throw RoomActionDenied::because('speakers_full', 409);
         }
-        $target->forceFill(['invited_to_speak_at' => now(), 'invited_by_key' => $byKey, 'hand_raised_at' => null])->save();
+        $target->forceFill(['invited_to_speak_at' => now(), 'invited_by_key' => $byKey, 'invited_role' => null, 'hand_raised_at' => null])->save();
     }
 
     private function promote(Room $room, Member $target, RoomRole $to): void
@@ -623,6 +646,7 @@ class RoomManager
             'role' => $to,
             'hand_raised_at' => null,
             'invited_to_speak_at' => null,
+            'invited_role' => null,
             'invited_by_key' => null,
             // New speakers start muted; demoted speakers stop sending.
             'self_muted' => true,
@@ -630,11 +654,29 @@ class RoomManager
         ])->save();
     }
 
+    /** Invite someone to be a co-host; the same checks run again when they accept. */
+    private function inviteCoHost(Room $room, Member $target, string $byKey): void
+    {
+        if ($target->role->isHost()) {
+            return;
+        }
+        $this->ensureCanBeCoHost($room, $target);
+
+        $target->forceFill(['invited_to_speak_at' => now(), 'invited_by_key' => $byKey, 'invited_role' => RoomRole::CoHost->value])->save();
+    }
+
     private function makeCoHost(Room $room, Member $target): void
     {
         if ($target->role->isHost()) {
             return;
         }
+        $this->ensureCanBeCoHost($room, $target);
+
+        $target->forceFill(['role' => RoomRole::CoHost, 'hand_raised_at' => null])->save();
+    }
+
+    private function ensureCanBeCoHost(Room $room, Member $target): void
+    {
         $identity = app(ParticipantResolver::class)->find($target->participant_key);
         if (! $identity || ! $this->access->canHost($identity, $room)) {
             throw RoomActionDenied::because('cannot_host', 409);
@@ -646,8 +688,6 @@ class RoomManager
             && $room->activeCount(RoomRole::Host, RoomRole::CoHost, RoomRole::Speaker) >= $room->max_speakers) {
             throw RoomActionDenied::because('speakers_full', 409);
         }
-
-        $target->forceFill(['role' => RoomRole::CoHost, 'hand_raised_at' => null])->save();
     }
 
     private function removeMember(Room $room, Member $target, string $byKey, bool $ban): void
@@ -677,6 +717,7 @@ class RoomManager
             'connection_id' => null,
             'hand_raised_at' => null,
             'invited_to_speak_at' => null,
+            'invited_role' => null,
             'self_muted' => true,
             'left_at' => now(),
         ])->save();

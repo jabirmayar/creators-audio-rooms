@@ -25,6 +25,7 @@ use Illuminate\Support\Carbon;
  * @property ?Carbon $hand_raised_at
  * @property ?Carbon $invited_to_speak_at
  * @property ?string $invited_by_key
+ * @property ?string $invited_role
  * @property ?Carbon $joined_at
  * @property ?Carbon $last_seen_at
  * @property ?Carbon $left_at
@@ -72,6 +73,16 @@ class Member extends Model
         return $this->connection_id ? substr(hash('sha256', $this->connection_id), 0, 12) : null;
     }
 
+    /** What the open invitation is for ("speaker" or "co_host"), or null without one. */
+    public function invitedRole(): ?string
+    {
+        if ($this->invited_to_speak_at === null) {
+            return null;
+        }
+
+        return $this->invited_role === RoomRole::CoHost->value ? RoomRole::CoHost->value : RoomRole::Speaker->value;
+    }
+
     /**
      * Display-safe data for other members of the room.
      *
@@ -89,6 +100,7 @@ class Member extends Model
             'hand_raised' => $this->hand_raised_at !== null,
             'hand_raised_at' => $this->hand_raised_at?->toIso8601String(),
             'invited' => $this->invited_to_speak_at !== null,
+            'invited_role' => $this->invitedRole(),
             'moderator_muted' => $this->moderator_muted,
             'self_muted' => $this->self_muted,
         ];

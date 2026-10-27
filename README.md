@@ -480,6 +480,7 @@ All events are in `daacreators\CreatorsAudioRooms\Events` and carry the `$room`.
 | `ParticipantMuted` | `participantKey`, `byKey` |
 | `ParticipantRemoved` | `participantKey`, `byKey`, `banned` |
 | `SpeakerInvited` | `participantKey`, `byKey` |
+| `CoHostInvited` | `participantKey`, `byKey` |
 
 ## Commands and scheduling
 
@@ -508,7 +509,7 @@ No queue worker is needed.
 - **Joining.** Everyone joins as a listener, except people who already hold a role in that room. Rejoining (reload, reconnect, new device) reuses the same membership and keeps the role. The newest tab or device takes over and older ones are told so.
 - **Speaking.** Nobody becomes a speaker without agreeing to it. Listeners raise a hand and a host approves, or a host invites a listener, who then accepts or declines; a host can withdraw an invitation that has not been answered. Microphones always start off, and only the participant can turn theirs on.
 - **Muting.** A host can mute a speaker. That speaker cannot unmute until a host allows it, and even then only the speaker can turn the microphone back on. A microphone is never switched on remotely.
-- **Hosts.** A room has at most two hosts (host and co-host). Co-hosts cannot act on the host. When the host leaves, the longest-present co-host becomes host. A live room with no host ends after `host_absent_grace_seconds` (2 minutes by default).
+- **Hosts.** A room has at most two hosts (host and co-host). A co-host is invited and takes the role only after accepting. Co-hosts cannot act on the host, and cannot end the room while the host is in it. When the host leaves, the longest-present co-host becomes host. A live room with no host ends after `host_absent_grace_seconds` (2 minutes by default).
 - **Monitoring.** Participants your app allows to monitor can join any room without taking a listener place, moderate everyone in it, and are always shown to the room (see [Monitoring](#monitoring)).
 - **Removing and banning.** Removed participants cannot rejoin that room. Banned participants are blocked from it permanently, or for every room in the tenant with a tenant-wide ban.
 - **Simultaneous actions.** Changes run in database transactions with the room locked. Two hosts acting at once never break the limits; the second gets a clear "already changed" response.

@@ -120,7 +120,7 @@ class ModerationTest extends ApiTestCase
         $co = $this->staff('co@org-a.test');
         $roomId = $this->createLiveRoom($host);
         $this->join($co, $roomId);
-        $this->moderate($host, $roomId, 'make_co_host', $co)->assertOk();
+        $this->makeCoHost($host, $roomId, $co)->assertOk();
 
         $this->moderate($co, $roomId, 'remove', $host)->assertStatus(403);
         $this->moderate($co, $roomId, 'mute', $host)->assertStatus(403);
@@ -136,7 +136,7 @@ class ModerationTest extends ApiTestCase
         $this->join($co1, $roomId);
         $this->join($co2, $roomId);
 
-        $this->moderate($host, $roomId, 'make_co_host', $co1)->assertOk();
+        $this->makeCoHost($host, $roomId, $co1)->assertOk();
         $this->moderate($host, $roomId, 'make_co_host', $co2)->assertStatus(409)->assertJson(['error' => 'hosts_full']);
     }
 
