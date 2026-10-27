@@ -164,7 +164,8 @@
             this.state = null;        // last room state from the server
             this.joined = false;
             this.status = 'idle';     // idle | joining | connected | reconnecting | offline | replaced | removed | ended
-            this.notice = null;       // { kind, text, action }
+            this.notice = null;       // { kind, text, action, sticky }
+            this.noticeTimer = null;  // hides passing messages after a few seconds
             this.cursor = 0;
             this.version = -1;
             this.iceServers = [];
@@ -448,7 +449,7 @@
             if (terminal[code]) {
                 if (e.body && e.body.state) this.setState(e.body.state);
                 this.disconnect(terminal[code]);
-                this.notice = { kind: code === 'room_ended' ? 'info' : 'warn', text: this.tr('state_' + terminal[code]) };
+                this.notice = { kind: code === 'room_ended' ? 'info' : 'warn', text: this.tr('state_' + terminal[code]), sticky: true };
                 this.render();
                 return;
             }
@@ -473,7 +474,7 @@
                 return;
             }
             if (code === 'room_not_live') {
-                this.notice = { kind: 'info', text: this.tr('state_not_live') };
+                this.notice = { kind: 'info', text: this.tr('state_not_live'), sticky: true };
                 this.render();
                 this.scheduleLobbyRefresh();
                 return;
@@ -1288,6 +1289,30 @@
             if (visible && !(this.notice && this.notice.kind === 'error')) { this.notice = { kind: 'ok', text }; this.render(); }
         }
 
+        /**
+         * Passing messages ("You are now the host", "A host muted you") hide by themselves.
+         * Errors, messages with a button and room-state messages stay until dismissed.
+         */
+        scheduleNoticeHide() {
+            const n = this.notice;
+            if (!n || n === this.noticeTimerFor) return;
+            clearTimeout(this.noticeTimer);
+            this.noticeTimerFor = n;
+            if (n.sticky || n.action || n.kind === 'error') return;
+            this.noticeTimer = setTimeout(() => {
+                if (this.notice !== n) return;
+                // Leave it while the pointer or keyboard focus is on it; try again shortly.
+                const banner = this.el.querySelector('.car-banner--notice');
+                if (banner && (banner.matches(':hover') || banner.contains(document.activeElement))) {
+                    this.noticeTimerFor = null;
+                    this.scheduleNoticeHide();
+                    return;
+                }
+                this.notice = null;
+                this.render();
+            }, n.kind === 'ok' ? 5000 : 8000);
+        }
+
         // ─── Rendering ─────────────────────────────────────────────────────
 
         /** Selector for the focused control, so focus survives a re-render. */
@@ -1404,7 +1429,8 @@
                     actions.push('<a class="car-btn car-btn--small car-btn--primary" href="' + esc(login) + '">' + esc(this.tr('sign_in')) + '</a>');
                 }
                 actions.push('<button type="button" class="car-btn car-btn--small" data-action="dismiss" aria-label="' + esc(this.tr('dismiss')) + '">×</button>');
-                parts.push(this.banner(this.notice.kind, this.notice.text, '<div class="car-banner-actions">' + actions.join('') + '</div>'));
+                parts.push(this.banner(this.notice.kind, this.notice.text, '<div class="car-banner-actions">' + actions.join('') + '</div>', 'car-banner--notice'));
+                this.scheduleNoticeHide();
             }
             return parts.join('');
         }
@@ -1478,9 +1504,9 @@
                 '</div></div>';
         }
 
-        banner(kind, text, extra) {
+        banner(kind, text, extra, cls) {
             const icon = { ok: ICONS.check, info: ICONS.info, warn: ICONS.alert, error: ICONS.alert }[kind] || ICONS.info;
-            return '<div class="car-banner car-banner--' + esc(kind) + '" role="' + (kind === 'error' ? 'alert' : 'status') + '"><span class="car-banner-icon">' + icon + '</span><span>' + esc(text) + '</span>' + (extra || '') + '</div>';
+            return '<div class="car-banner car-banner--' + esc(kind) + (cls ? ' ' + cls : '') + '" role="' + (kind === 'error' ? 'alert' : 'status') + '"><span class="car-banner-icon">' + icon + '</span><span>' + esc(text) + '</span>' + (extra || '') + '</div>';
         }
 
         renderSections() {

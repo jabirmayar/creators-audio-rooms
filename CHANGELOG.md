@@ -8,6 +8,7 @@ All notable changes to this package are documented here. The format follows [Kee
 
 - "Make co-host" now sends an invitation (shown as "Invite as co-host"). The person becomes co-host only when they accept; until then their role does not change. The host can withdraw the invitation, and the host limit is checked again on accepting.
 - A co-host cannot end the room while the host is in it (`host_present`). When the host leaves, the co-host takes over as before and can then end it. Monitors can still end any room.
+- Passing messages such as "You are now the host" hide after a few seconds; they stay while pointed at or focused. Errors, messages with a button and room-state messages still stay until dismissed.
 
 ### Added
 
