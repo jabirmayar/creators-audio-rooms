@@ -193,6 +193,15 @@ AUDIO_ROOMS_TURN_URLS="turn:turn.example.com:3478,turns:turn.example.com:5349"
 AUDIO_ROOMS_TURN_SECRET="the-same-secret-as-your-turn-server"
 ```
 
+**Cloudflare Realtime TURN** (optional, built in): create a TURN key in the Cloudflare dashboard (Realtime → TURN Server) and set its id and API token. The package asks Cloudflare for short-lived credentials (valid 24 hours by default, `turn.cloudflare.ttl_seconds`), shares them between participants and refreshes them halfway through, so joining a room does not call Cloudflare each time. The API token stays on your server. If Cloudflare cannot be reached, rooms keep working with the other ICE servers and a warning is logged.
+
+```dotenv
+AUDIO_ROOMS_CLOUDFLARE_TURN_KEY_ID="your-turn-key-id"
+AUDIO_ROOMS_CLOUDFLARE_TURN_API_TOKEN="your-turn-key-api-token"
+```
+
+`doctor` requests credentials from Cloudflare when this is set, so a wrong key or token shows up there.
+
 Include a `turn:…:443?transport=tcp` or `turns:…:443` URL so networks that only allow web traffic can still reach the relay. `php artisan creators-audio-rooms:doctor` reports whether a relay is configured. Set `AUDIO_ROOMS_ICE_POLICY=relay` to force every connection through the relay, which also hides participants' IP addresses from each other.
 
 ### Checking a connection

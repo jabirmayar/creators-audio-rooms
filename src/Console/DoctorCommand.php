@@ -3,6 +3,7 @@
 namespace daacreators\CreatorsAudioRooms\Console;
 
 use daacreators\CreatorsAudioRooms\CreatorsAudioRoomsServiceProvider as Provider;
+use daacreators\CreatorsAudioRooms\Signaling\CloudflareTurn;
 use daacreators\CreatorsAudioRooms\Signaling\IceServers;
 use daacreators\CreatorsAudioRooms\Support\Tables;
 use Illuminate\Console\Command;
@@ -162,6 +163,16 @@ class DoctorCommand extends Command
         $hasTurn = $urls->contains(fn ($u) => str_starts_with((string) $u, 'turn')) || IceServers::hasTurn();
         if (IceServers::hasTurn()) {
             $urls = $urls->merge((array) config(Provider::NAME.'.turn.urls'));
+        }
+
+        if (CloudflareTurn::configured()) {
+            // Ask Cloudflare now (fresh), so a wrong key or token shows up here rather than in a room.
+            $cloudflare = app(CloudflareTurn::class);
+            $cloudflare->flush();
+            $relays = $cloudflare->servers();
+            $relays !== []
+                ? $this->reportPass('Cloudflare TURN', 'credentials issued ('.count($relays[0]['urls']).' relay URLs)')
+                : $this->reportFail('Cloudflare TURN', 'could not get credentials; check AUDIO_ROOMS_CLOUDFLARE_TURN_KEY_ID and _API_TOKEN (details in the log)');
         }
 
         if ($urls->isEmpty()) {

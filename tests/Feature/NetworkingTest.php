@@ -4,6 +4,7 @@ namespace daacreators\CreatorsAudioRooms\Tests\Feature;
 
 use daacreators\CreatorsAudioRooms\Tests\Fixtures\EmailDomainTenants;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Http;
 
 class NetworkingTest extends ApiTestCase
 {
@@ -52,6 +53,45 @@ class NetworkingTest extends ApiTestCase
 
         $this->assertSame('relay-pass', $turn['credential']);
         $this->assertSame(['turn:relay.example.test:443?transport=tcp'], $turn['urls']);
+    }
+
+    public function test_cloudflare_turn_credentials_are_fetched_cached_and_filtered(): void
+    {
+        config([
+            'creators-audio-rooms.turn.cloudflare.key_id' => 'key-123',
+            'creators-audio-rooms.turn.cloudflare.api_token' => 'secret-token',
+        ]);
+        Http::fake([
+            'rtc.live.cloudflare.com/*' => Http::response(['iceServers' => [
+                ['urls' => ['stun:stun.cloudflare.com:3478']],
+                ['urls' => ['turn:turn.cloudflare.com:3478?transport=udp', 'turn:turn.cloudflare.com:53?transport=udp', 'turns:turn.cloudflare.com:443?transport=tcp'], 'username' => 'cf-user', 'credential' => 'cf-pass'],
+            ]], 201),
+        ]);
+        $roomId = $this->createLiveRoom($this->staff());
+
+        $first = $this->join($this->member(), $roomId);
+        $this->join($this->member(), $roomId);
+
+        $turn = collect($first->json('ice_servers'))->firstWhere('username', 'cf-user');
+        $this->assertSame(['turn:turn.cloudflare.com:3478?transport=udp', 'turns:turn.cloudflare.com:443?transport=tcp'], $turn['urls']);
+        $this->assertSame('cf-pass', $turn['credential']);
+        $this->assertStringNotContainsString('secret-token', $first->getContent());
+        Http::assertSentCount(1);
+        Http::assertSent(fn ($request) => $request->url() === 'https://rtc.live.cloudflare.com/v1/turn/keys/key-123/credentials/generate-ice-servers'
+            && $request->hasHeader('Authorization', 'Bearer secret-token')
+            && $request['ttl'] === 86400);
+    }
+
+    public function test_rooms_keep_working_when_cloudflare_is_unreachable(): void
+    {
+        config([
+            'creators-audio-rooms.turn.cloudflare.key_id' => 'key-123',
+            'creators-audio-rooms.turn.cloudflare.api_token' => 'wrong',
+        ]);
+        Http::fake(['rtc.live.cloudflare.com/*' => Http::response(['errors' => ['unauthorized']], 401)]);
+        $roomId = $this->createLiveRoom($this->staff());
+
+        $this->join($this->member(), $roomId)->assertOk()->assertJsonPath('ice_servers', config('creators-audio-rooms.ice_servers'));
     }
 
     public function test_join_tells_the_browser_the_ice_transport_policy(): void

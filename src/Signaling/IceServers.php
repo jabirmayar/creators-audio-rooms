@@ -13,6 +13,8 @@ use daacreators\CreatorsAudioRooms\Support\ParticipantIdentity;
  */
 class IceServers
 {
+    public function __construct(private readonly CloudflareTurn $cloudflare) {}
+
     /** @return list<array{urls: list<string>, username?: string, credential?: string}> */
     public function forParticipant(ParticipantIdentity $participant): array
     {
@@ -39,6 +41,10 @@ class IceServers
             $servers[] = ['urls' => $urls, 'username' => $username, 'credential' => $credential];
         }
 
+        if (CloudflareTurn::configured()) {
+            array_push($servers, ...$this->cloudflare->servers());
+        }
+
         return $servers;
     }
 
@@ -49,7 +55,7 @@ class IceServers
         $configured = array_filter((array) ($turn['urls'] ?? [])) !== []
             && ((string) ($turn['secret'] ?? '') !== ''
                 || ((string) ($turn['username'] ?? '') !== '' && (string) ($turn['credential'] ?? '') !== ''));
-        if ($configured) {
+        if ($configured || CloudflareTurn::configured()) {
             return true;
         }
 

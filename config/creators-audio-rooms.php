@@ -145,6 +145,14 @@ return [
         // …or a fixed username and credential, as most hosted TURN providers issue.
         'username' => env('AUDIO_ROOMS_TURN_USERNAME'),
         'credential' => env('AUDIO_ROOMS_TURN_CREDENTIAL'),
+
+        // …or Cloudflare Realtime TURN: set the TURN key id and its API token. Short-lived
+        // credentials are requested from Cloudflare and cached; the token never reaches browsers.
+        'cloudflare' => [
+            'key_id' => env('AUDIO_ROOMS_CLOUDFLARE_TURN_KEY_ID'),
+            'api_token' => env('AUDIO_ROOMS_CLOUDFLARE_TURN_API_TOKEN'),
+            'ttl_seconds' => 86400,
+        ],
     ],
 
     /*

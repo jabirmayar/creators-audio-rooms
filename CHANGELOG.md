@@ -2,6 +2,12 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.7.0 - 2026-10-27
+
+### Added
+
+- Optional Cloudflare Realtime TURN relay: set `AUDIO_ROOMS_CLOUDFLARE_TURN_KEY_ID` and `AUDIO_ROOMS_CLOUDFLARE_TURN_API_TOKEN`. Short-lived credentials are requested from Cloudflare on the server, cached and shared, and refreshed halfway through their lifetime; port 53 URLs (blocked by browsers) are left out. If Cloudflare is unreachable, rooms fall back to the other ICE servers and a warning is logged. `doctor` checks the key by requesting credentials.
+
 ## 1.6.0 - 2026-10-27
 
 ### Added
