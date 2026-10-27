@@ -2,6 +2,12 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.7.2 - 2026-10-27
+
+### Fixed
+
+- Older browsers (Chrome before 87, older Android WebViews): fallbacks for `inset` and logical position properties, so person menus open, confirmation dialogs cover the screen, room cards are clickable and badges sit in place; hover styles no longer depend on `:focus-visible` support; checked "Who can join" options are highlighted without `:has()`.
+
 ## 1.7.1 - 2026-10-27
 
 ### Added

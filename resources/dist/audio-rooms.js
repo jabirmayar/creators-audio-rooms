@@ -1649,6 +1649,11 @@
         const count = picker.querySelector('[data-audience-count]');
         const update = () => {
             const chosen = boxes().filter((b) => b.checked).length;
+            // Highlight for browsers without :has().
+            picker.querySelectorAll('.car-check').forEach((label) => {
+                const input = label.querySelector('input');
+                label.classList.toggle('is-checked', Boolean(input && input.checked));
+            });
             picker.classList.toggle('is-everyone', Boolean(everyone && everyone.checked));
             if (count) count.textContent = chosen ? fill(picker.getAttribute('data-label-selected'), { count: chosen }) : '';
         };
