@@ -200,7 +200,8 @@
     .car-root[data-theme="auto"] .car-hue-4 { background: #134e4a; color: #99f6e4; }
     .car-root[data-theme="auto"] .car-hue-5 { background: #334155; color: #e2e8f0; }
 }
-.car-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+/* Pinned to the circle: inside the avatar's grid a portrait photo would otherwise stretch the row to its own shape (an oval that covers the name). */
+.car-avatar img { position: absolute; top: 0; left: 0; display: block; width: 100%; height: 100%; max-width: none; border-radius: 50%; object-fit: cover; }
 .car-person.is-speaking .car-avatar { box-shadow: 0 0 0 3px var(--car-bg), 0 0 0 6px var(--car-accent); }
 .car-person.is-disconnected .car-avatar { opacity: .45; }
 .car-person.is-invited .car-avatar { outline: 2px dashed var(--car-accent); outline-offset: 3px; }

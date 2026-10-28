@@ -8,6 +8,10 @@ All notable changes to this package are documented here. The format follows [Kee
 
 - Speakers with their microphone off no longer send anything. Before, a switched-off microphone still sent silence to every member, which in a full room was more than half of all audio traffic (and of TURN relay usage). Turning the microphone on resumes sending at once.
 
+### Fixed
+
+- Profile photos that are not square (for example portrait phone photos) showed as an oval and covered the name below. Photos are now always cropped to the circle.
+
 ## 1.8.0 - 2026-10-27
 
 ### Changed
