@@ -609,18 +609,29 @@
         setTrackEnabled(enabled) {
             if (!this.localStream) return;
             this.localStream.getAudioTracks().forEach((t) => { t.enabled = enabled; });
+            this.attachLocalTrack();
         }
 
         localTrack() {
             return this.localStream ? this.localStream.getAudioTracks()[0] || null : null;
         }
 
-        attachLocalTrack() {
+        /**
+         * The track connections should carry: the microphone only while it is on. A switched-off
+         * track still sends silence frames to every member (and through a relay, which is billed),
+         * so muted speakers send nothing at all instead.
+         */
+        sendingTrack() {
             const track = this.localTrack();
+            return track && track.enabled && track.readyState === 'live' ? track : null;
+        }
+
+        attachLocalTrack() {
+            const track = this.sendingTrack();
             this.peers.forEach((peer) => {
                 const tr = peer.pc.getTransceivers()[0];
-                if (tr && (tr.direction === 'sendrecv' || tr.direction === 'sendonly')) {
-                    tr.sender.replaceTrack(track).then(() => this.applyBitrate(peer)).catch(() => {});
+                if (tr && (tr.direction === 'sendrecv' || tr.direction === 'sendonly') && tr.sender.track !== track) {
+                    tr.sender.replaceTrack(track).then(() => { if (track) this.applyBitrate(peer); }).catch(() => {});
                 }
             });
         }
@@ -709,7 +720,7 @@
             if (this.maxBitrate) init.sendEncodings = [{ maxBitrate: this.maxBitrate }];
             let tr;
             try { tr = peer.pc.addTransceiver('audio', init); } catch (e) { delete init.sendEncodings; tr = peer.pc.addTransceiver('audio', init); }
-            const track = this.localTrack();
+            const track = this.sendingTrack();
             if (track) await tr.sender.replaceTrack(track).catch(() => {});
             await this.sendOffer(key, peer);
         }
@@ -760,7 +771,7 @@
                     if (tr) {
                         if (ROLE_SPEAKS[me.role]) {
                             tr.direction = 'sendrecv';
-                            const track = this.localTrack();
+                            const track = this.sendingTrack();
                             if (track) await tr.sender.replaceTrack(track).catch(() => {});
                         } else {
                             // Listeners only ever receive.

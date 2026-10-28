@@ -2,6 +2,12 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.8.1 - 2026-10-28
+
+### Changed
+
+- Speakers with their microphone off no longer send anything. Before, a switched-off microphone still sent silence to every member, which in a full room was more than half of all audio traffic (and of TURN relay usage). Turning the microphone on resumes sending at once.
+
 ## 1.8.0 - 2026-10-27
 
 ### Changed
