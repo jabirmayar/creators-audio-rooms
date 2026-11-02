@@ -2,6 +2,12 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.8.2 - 2026-11-02
+
+### Fixed
+
+- Reloading the room page asked people to join again, even though they were in the room a moment before. A reload of the same tab now goes straight back in, in the same way (listener, speaker, host or monitor; always with the microphone off, as every re-join is). A new tab or window still asks, and so does a tab reopened more than 10 minutes later. Leaving, being removed or banned, the room ending, opening the room in another tab or signing out stops it.
+
 ## 1.8.1 - 2026-10-28
 
 ### Changed

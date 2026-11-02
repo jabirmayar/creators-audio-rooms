@@ -52,6 +52,8 @@
     }
 
     let instances = 0;
+    /** A reload within this time goes back into the room the tab was in. */
+    const RESUME_WINDOW_MS = 10 * 60 * 1000;
 
     /** Stable soft colour for people without a photo (six hues). */
     function hue(key) {
@@ -249,8 +251,50 @@
             }
             this.render();
             if (this.takeEnterFlag()) return;
+            if (this.resumeAfterReload()) return;
             // Rooms that have not started yet are re-checked so listeners can join once live.
             this.scheduleLobbyRefresh();
+        }
+
+        // ─── Staying in the room across a reload ──────────────────────────
+        //
+        // Closing or reloading the page leaves the room (pagehide), so the server
+        // never keeps a ghost listener. This tab remembers it was inside, and a
+        // reload of the same tab goes straight back in the same way (listener or
+        // monitor; always muted, as every re-join is). Only this tab: a new tab or
+        // window still asks. Forgotten when the person really leaves: the Leave
+        // button, removed, banned, the room ending, another tab taking over, or
+        // signing out.
+
+        presenceKey() {
+            return 'car:in-room:' + this.config.room;
+        }
+
+        rememberInRoom() {
+            try { window.sessionStorage.setItem(this.presenceKey(), JSON.stringify({ monitor: Boolean(this.asMonitor), at: Date.now() })); } catch (e) { /* storage off */ }
+        }
+
+        forgetInRoom() {
+            try { window.sessionStorage.removeItem(this.presenceKey()); } catch (e) { /* storage off */ }
+        }
+
+        resumeAfterReload() {
+            let saved = null;
+            try { saved = JSON.parse(window.sessionStorage.getItem(this.presenceKey()) || 'null'); } catch (e) { saved = null; }
+            if (!saved) return false;
+            // A tab restored much later (browser reopened) starts fresh.
+            if (!saved.at || Date.now() - saved.at > RESUME_WINDOW_MS) { this.forgetInRoom(); return false; }
+
+            const room = this.state && this.state.room;
+            const me = this.state && this.state.me;
+            if (!room || room.status === 'ended' || !window.RTCPeerConnection) { this.forgetInRoom(); return false; }
+            if (me && me.state === 'removed') { this.forgetInRoom(); return false; }
+            // Listeners wait for the room to be live again; hosts may go in before.
+            const host = me && ['host', 'co_host'].includes(me.role);
+            if (room.status !== 'live' && !host) return false;
+
+            this.join(Boolean(saved.monitor));
+            return true;
         }
 
         /** The host just started this room: go straight in instead of showing "Enter as host". */
@@ -311,6 +355,7 @@
             this.joined = true;
             this.status = 'connected';
             this.failures = 0;
+            this.rememberInRoom();
             this.closeAllPeers();
             this.setState(data.state);
             this.touchActivity();
@@ -324,6 +369,7 @@
 
         async leave(silent) {
             const wasJoined = this.joined;
+            this.forgetInRoom();
             this.stopSync();
             this.joined = false;
             this.status = 'idle';
@@ -435,6 +481,7 @@
 
         /** Stop audio and syncing after a final answer from the server. */
         disconnect(status) {
+            this.forgetInRoom();
             this.stopSync();
             this.joined = false;
             this.closeAllPeers();
@@ -1116,6 +1163,8 @@
             window.addEventListener('offline', () => { if (this.joined) this.setStatus('offline'); });
             window.addEventListener('pagehide', (e) => {
                 if (this.joined && !e.persisted) {
+                    // Still "in the room" for this tab: a reload goes straight back in (resumeAfterReload).
+                    this.rememberInRoom();
                     this.api.request('POST', '/leave', {}, { keepalive: true }).catch(() => {});
                 }
             });
