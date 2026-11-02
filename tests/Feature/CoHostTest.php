@@ -6,7 +6,9 @@ use daacreators\CreatorsAudioRooms\Events\CoHostInvited;
 use daacreators\CreatorsAudioRooms\Events\RoleChanged;
 use daacreators\CreatorsAudioRooms\Events\SpeakerInvited;
 use daacreators\CreatorsAudioRooms\Models\Room;
+use daacreators\CreatorsAudioRooms\Support\ParticipantIdentity;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 
 class CoHostTest extends ApiTestCase
 {
@@ -93,5 +95,28 @@ class CoHostTest extends ApiTestCase
         $this->sync($co, $roomId)->assertJsonPath('state.me.role', 'host')->assertJsonPath('state.can.end', true);
         $this->api($co, 'POST', "/rooms/{$roomId}/end")->assertOk();
         $this->assertFalse(Room::find($roomId)->isLive());
+    }
+
+    public function test_hosts_see_who_may_be_made_co_host(): void
+    {
+        // The app lets staff host, not members.
+        Gate::define('audio-rooms.host', fn ($user, ParticipantIdentity $who) => $who->type === 'staff');
+        $host = $this->staff();
+        $staff = $this->staff('co@org-a.test');
+        $member = $this->member();
+        $roomId = $this->createLiveRoom($host);
+        $this->join($staff, $roomId);
+        $this->join($member, $roomId);
+
+        $listeners = collect($this->sync($host, $roomId)->json('state.listeners'))->keyBy('key');
+        $this->assertTrue($listeners[$this->keyOf($staff)]['can_host']);
+        $this->assertFalse($listeners[$this->keyOf($member)]['can_host']);
+
+        // Only moderators are told.
+        $seen = collect($this->sync($member, $roomId)->json('state.listeners'))->keyBy('key');
+        $this->assertArrayNotHasKey('can_host', $seen[$this->keyOf($staff)]);
+
+        // The server still refuses, whatever the page shows.
+        $this->moderate($host, $roomId, 'make_co_host', $member)->assertStatus(409)->assertJsonPath('error', 'cannot_host');
     }
 }

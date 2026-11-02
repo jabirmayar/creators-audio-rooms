@@ -4,6 +4,7 @@ namespace daacreators\CreatorsAudioRooms\Services;
 
 use daacreators\CreatorsAudioRooms\Contracts\AudienceResolver;
 use daacreators\CreatorsAudioRooms\Contracts\Authorizer;
+use daacreators\CreatorsAudioRooms\Contracts\ParticipantResolver;
 use daacreators\CreatorsAudioRooms\Contracts\ProvidesAudienceOptions;
 use daacreators\CreatorsAudioRooms\Enums\MemberState;
 use daacreators\CreatorsAudioRooms\Enums\RoomAction;
@@ -12,6 +13,7 @@ use daacreators\CreatorsAudioRooms\Models\Member;
 use daacreators\CreatorsAudioRooms\Models\Room;
 use daacreators\CreatorsAudioRooms\Signaling\SignalStore;
 use daacreators\CreatorsAudioRooms\Support\ParticipantIdentity;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * The room as one viewer may see it: display-safe member data (no emails or
@@ -117,6 +119,21 @@ class RoomStatePresenter
         ];
     }
 
+    /**
+     * Whether this member may be made co-host. Asked for every check-in of every moderator,
+     * so the answer is kept for a few minutes per room and person.
+     */
+    private function canHost(Member $member, Room $room): bool
+    {
+        $cache = Cache::store(config('creators-audio-rooms.signaling.cache_store') ?: null);
+
+        return (bool) $cache->remember('car:can-host:'.$room->id.':'.$member->participant_key, now()->addMinutes(5), function () use ($member, $room) {
+            $identity = app(ParticipantResolver::class)->find($member->participant_key);
+
+            return $identity !== null && $this->access->canHost($identity, $room);
+        });
+    }
+
     private function manager(): RoomManager
     {
         return app(RoomManager::class);
@@ -133,9 +150,13 @@ class RoomStatePresenter
         $me = $this->access->member($viewer, $room);
         $isModerator = $me?->state === MemberState::Joined && $me->role->canModerate();
 
-        $public = $members->map(function (Member $member) {
+        $public = $members->map(function (Member $member) use ($room, $isModerator) {
             $data = $member->toPublicArray();
             $data['connected'] = $this->signals->presence($member->room_id, $member->participant_key) !== null;
+            // Moderators only offer "Invite as co-host" to people the app lets host.
+            if ($isModerator && ! $member->role->isHost() && $member->role !== RoomRole::Monitor) {
+                $data['can_host'] = $this->canHost($member, $room);
+            }
 
             return $data;
         });

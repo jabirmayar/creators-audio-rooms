@@ -2,6 +2,12 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.8.3 - 2026-11-02
+
+### Fixed
+
+- "Invite as co-host" was offered for people the app does not let host, and clicking it failed with "This person cannot be a host." It is now only offered for people who may host. Room state for moderators includes `can_host` on each member (cached for five minutes per room and person); the server check on inviting and accepting is unchanged.
+
 ## 1.8.2 - 2026-11-02
 
 ### Fixed

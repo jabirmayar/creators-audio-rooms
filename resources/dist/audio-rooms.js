@@ -1664,7 +1664,7 @@
                 if (!m.moderator_muted) items.push(btn('mute')); else items.push(btn('allow_unmute'));
             }
             if (ROLE_SPEAKS[m.role] && m.role !== 'host') items.push(btn('demote'));
-            if (m.role !== 'co_host' && m.role !== 'host' && !m.invited && s.counts.hosts < s.room.limits.hosts) items.push(btn('make_co_host'));
+            if (m.role !== 'co_host' && m.role !== 'host' && !m.invited && m.can_host !== false && s.counts.hosts < s.room.limits.hosts) items.push(btn('make_co_host'));
             items.push('<div class="car-menu-sep" role="separator"></div>');
             items.push(btn('remove', 'is-danger'));
             items.push(btn('ban', 'is-danger'));
