@@ -447,6 +447,8 @@
             // A hidden tab checks in slowly, unless the mini player or a bar on another tab is showing the room
             // (so they see changes, and the room ending, within a couple of seconds).
             if (document.hidden && !this.pip && !this.watchedRecently()) return this.intervals.hidden;
+            // Shown only in a bar on another tab: the relaxed pace is enough (the room ending shows within seconds).
+            if (document.hidden && !this.pip) return this.intervals.idle;
             const recent = Date.now() - this.lastActivity < 10000;
             const negotiating = Array.from(this.peers.values()).some((p) => linkState(p.pc) !== 'connected');
             return recent || negotiating ? this.intervals.active : this.intervals.idle;
