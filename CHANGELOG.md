@@ -2,6 +2,12 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.8.5 - 2026-11-03
+
+### Changed
+
+- The microphone button reacts at once. Turning the microphone on or off takes effect on the device straight away (others hear you without waiting for the server) and the server is told in the background, one request at a time so quick taps end in the right state. An unmute the server refuses (for example after a moderator mute) turns the microphone back off; a mute that does not reach the server is retried.
+
 ## 1.8.4 - 2026-11-03
 
 ### Fixed

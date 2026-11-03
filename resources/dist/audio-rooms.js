@@ -164,6 +164,7 @@
             this.api = new Api(config.api, config.csrf);
 
             this.state = null;        // last room state from the server
+            this.pendingMute = null;  // mute choice on its way to the server (shown and applied already)
             this.joined = false;
             this.status = 'idle';     // idle | joining | connected | reconnecting | offline | replaced | removed | ended
             this.notice = null;       // { kind, text, action, sticky }
@@ -347,6 +348,8 @@
             this.api.session = data.session;
             this.cursor = data.cursor || 0;
             this.iceServers = data.ice_servers || [];
+            this.pendingMute = null;
+            this.muteRetries = 0;
             this.maxBitrate = (data.audio && data.audio.max_bitrate) || 0;
             this.iceTransportPolicy = data.ice_transport_policy === 'relay' ? 'relay' : 'all';
             this.linkAttempts.clear();
@@ -540,6 +543,9 @@
         setState(state) {
             if (!state) return;
             const before = this.state && this.state.me;
+            if (this.pendingMute !== null && this.pendingMute !== undefined && state.me && ROLE_SPEAKS[state.me.role] && !state.me.moderator_muted) {
+                this.patchSelfMuted(state, this.pendingMute);
+            }
             this.state = state;
             this.version = state.room.version;
             this.onSelfChanged(before, state.me);
@@ -586,23 +592,69 @@
 
         // ─── Microphone ────────────────────────────────────────────────────
 
+        /**
+         * The microphone switches on or off at once, on this device; the server is told in the background
+         * (one request at a time, the latest choice wins). A refused unmute turns the microphone back off.
+         */
         async toggleMic() {
             const me = this.state && this.state.me;
             if (!me || !ROLE_SPEAKS[me.role]) return;
-            if (!me.self_muted) {
-                this.setTrackEnabled(false);
-                await this.action('/mute', { muted: true });
-                return;
+            const muted = !me.self_muted;
+            if (!muted) {
+                if (me.moderator_muted) {
+                    this.notice = { kind: 'warn', text: this.t.muted_by_moderator || this.tr('muted_by_host') };
+                    this.render();
+                    return;
+                }
+                const ok = await this.ensureMic();
+                if (!ok) return;
             }
-            if (me.moderator_muted) {
-                this.notice = { kind: 'warn', text: this.t.muted_by_moderator || this.tr('muted_by_host') };
-                this.render();
-                return;
+            this.pendingMute = muted;
+            this.setLocalMute(muted);
+            this.flushMute();
+        }
+
+        /** Show and apply a mute choice on this device straight away. */
+        setLocalMute(muted) {
+            this.setTrackEnabled(!muted);
+            this.patchSelfMuted(this.state, muted);
+            this.render();
+        }
+
+        /** The server's state may predate a choice still on its way; show the choice instead. */
+        patchSelfMuted(state, muted) {
+            if (!state || !state.me) return;
+            state.me.self_muted = muted;
+            ['hosts', 'speakers'].forEach((list) => (state[list] || []).forEach((m) => { if (m.key === state.me.key) m.self_muted = muted; }));
+        }
+
+        async flushMute() {
+            if (this.muteBusy) return;
+            this.muteBusy = true;
+            try {
+                let sent = null;
+                while (this.pendingMute !== null && this.pendingMute !== sent) {
+                    const want = this.pendingMute;
+                    sent = want;
+                    const result = await this.action('/mute', { muted: want });
+                    if (result || this.pendingMute !== want) continue;
+                    if (want) {
+                        // Muting must reach the server (others' screens): try again shortly; the microphone is already off.
+                        this.muteRetries = (this.muteRetries || 0) + 1;
+                        if (this.muteRetries <= 5 && this.joined) setTimeout(() => this.flushMute(), 1500);
+                        else this.pendingMute = null;
+                        return;
+                    }
+                    // Unmute refused (muted by a moderator, no longer a speaker) or lost: never stay live without the server.
+                    this.pendingMute = null;
+                    this.setLocalMute(true);
+                    return;
+                }
+                this.pendingMute = null;
+                this.muteRetries = 0;
+            } finally {
+                this.muteBusy = false;
             }
-            const ok = await this.ensureMic();
-            if (!ok) return;
-            const result = await this.action('/mute', { muted: false });
-            if (result && result.me && !result.me.self_muted) this.setTrackEnabled(true);
         }
 
         async ensureMic() {
