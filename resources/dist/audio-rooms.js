@@ -10,6 +10,7 @@
 
     const svg = (body, fill) => '<svg viewBox="0 0 24 24" fill="' + (fill || 'none') + '" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + body + '</svg>';
     const ICONS = {
+        pip: svg('<rect x="2.5" y="4.5" width="19" height="15" rx="2"/><rect x="12" y="11.5" width="7" height="5.5" rx="1"/>'),
         mic: svg('<rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/>'),
         micOff: svg('<path d="M3 3l18 18"/><path d="M9 9v2a3 3 0 0 0 5.1 2.1M15 10.5V5.5a3 3 0 0 0-5.7-1.3"/><path d="M5.5 11a6.5 6.5 0 0 0 10.4 5.2M18.5 11c0 .8-.1 1.5-.4 2.2M12 17.5V21M8.5 21h7"/>'),
         hand: svg('<path d="M8 12.5V6a1.5 1.5 0 0 1 3 0v5.5"/><path d="M11 11V4.5a1.5 1.5 0 0 1 3 0V11"/><path d="M14 11.5V6a1.5 1.5 0 0 1 3 0v6"/><path d="M17 12V9.5a1.5 1.5 0 0 1 3 0V15a7 7 0 0 1-7 7h-1.2a6 6 0 0 1-4.5-2l-3.6-4a1.6 1.6 0 0 1 2.4-2.1L8 15.6V12.5"/>'),
@@ -214,6 +215,13 @@
             });
 
             this.bindLifecycle();
+            this.pip = null;
+            this.channel = 'BroadcastChannel' in window ? new BroadcastChannel('creators-audio-rooms') : null;
+            if (this.channel) {
+                this.channel.onmessage = (e) => this.onChannelMessage(e.data);
+                setInterval(() => this.announcePresence(), 3000);
+                window.addEventListener('pagehide', () => { if (this.presenceRoom) this.channel.postMessage({ type: 'left', room: this.presenceRoom }); });
+            }
             this.clock = setInterval(() => {
                 this.el.querySelectorAll('[data-live-for]').forEach((node) => { node.textContent = liveFor(node.getAttribute('data-live-for'), this.t); });
             }, 30000);
@@ -252,6 +260,7 @@
             }
             this.render();
             if (this.takeEnterFlag()) return;
+            if (await this.takeContinueFlag()) return;
             if (this.resumeAfterReload()) return;
             // Rooms that have not started yet are re-checked so listeners can join once live.
             this.scheduleLobbyRefresh();
@@ -295,6 +304,33 @@
             if (room.status !== 'live' && !host) return false;
 
             this.join(Boolean(saved.monitor));
+            return true;
+        }
+
+        /**
+         * "Back to room" from the bar on another page opens the room with ?continue=…: carry on here, the way
+         * the other tab was in (it is replaced, as when any newer tab takes over). Only when a tab of this
+         * browser confirms it is in this room right now, so a shared link cannot put anyone in a room.
+         */
+        async takeContinueFlag() {
+            let params;
+            try { params = new URLSearchParams(window.location.search); } catch (e) { return false; }
+            const flag = params.get('continue');
+            if (!flag) return false;
+            params.delete('continue');
+            const query = params.toString();
+            try { window.history.replaceState(null, '', window.location.pathname + (query ? '?' + query : '') + window.location.hash); } catch (e) { /* keep the URL */ }
+            const room = this.state && this.state.room;
+            if (!this.channel || !room || room.status === 'ended' || !window.RTCPeerConnection) return false;
+            const confirmed = await new Promise((resolve) => {
+                const listen = new BroadcastChannel('creators-audio-rooms');
+                const done = (value) => { clearTimeout(timer); listen.close(); resolve(value); };
+                const timer = setTimeout(() => done(null), 1500);
+                listen.onmessage = (e) => { if (e.data && e.data.type === 'room' && e.data.room === room.id) done(e.data); };
+                listen.postMessage({ type: 'ping' });
+            });
+            if (!confirmed) return false;
+            this.join(Boolean(confirmed.monitor));
             return true;
         }
 
@@ -345,6 +381,8 @@
         }
 
         onJoined(data) {
+            // Another tab of this browser in the same room steps aside now (the server would tell it on its next check).
+            if (this.channel) this.channel.postMessage({ type: 'taken-over', room: this.config.room });
             this.api.session = data.session;
             this.cursor = data.cursor || 0;
             this.iceServers = data.ice_servers || [];
@@ -404,7 +442,7 @@
         }
 
         nextInterval() {
-            if (document.hidden) return this.intervals.hidden;
+            if (document.hidden && !this.pip) return this.intervals.hidden;
             const recent = Date.now() - this.lastActivity < 10000;
             const negotiating = Array.from(this.peers.values()).some((p) => linkState(p.pc) !== 'connected');
             return recent || negotiating ? this.intervals.active : this.intervals.idle;
@@ -1073,16 +1111,201 @@
             this.setMediaSession();
         }
 
-        /** Lock-screen / notification info; also helps mobile browsers keep audio playing in the background. */
+        /**
+         * Lock-screen / notification / browser media controls: room title and host, and (where the browser
+         * offers them) microphone and hang-up buttons. Also helps mobile browsers keep audio playing in the background.
+         */
         setMediaSession() {
-            if (!('mediaSession' in navigator) || !this.state || typeof window.MediaMetadata !== 'function') return;
+            if (!('mediaSession' in navigator)) return;
+            const ms = navigator.mediaSession;
+            if (!this.joined || !this.state) {
+                if (this.mediaSessionOn) {
+                    try { ms.metadata = null; ms.playbackState = 'none'; } catch (e) { /* optional */ }
+                    ['togglemicrophone', 'hangup'].forEach((a) => { try { ms.setActionHandler(a, null); } catch (e) { /* unsupported */ } });
+                    this.mediaSessionOn = false;
+                    this.mediaSessionKey = null;
+                }
+                return;
+            }
+            const s = this.state;
+            const key = s.room.id + '|' + s.room.title + '|' + (s.host ? s.host.name + s.host.avatar_url : '');
+            if (this.mediaSessionKey !== key && typeof window.MediaMetadata === 'function') {
+                const art = s.host && safeUrl(s.host.avatar_url) ? [{ src: s.host.avatar_url }] : [];
+                try {
+                    ms.metadata = new window.MediaMetadata({
+                        title: s.room.title,
+                        artist: s.host ? this.tr('hosted_by', { name: s.host.name }) : '',
+                        album: (this.config.branding && this.config.branding.name) || '',
+                        artwork: art,
+                    });
+                    this.mediaSessionKey = key;
+                } catch (e) { /* optional */ }
+            }
+            try { ms.playbackState = 'playing'; } catch (e) { /* optional */ }
+            if (!this.mediaSessionOn) {
+                try { ms.setActionHandler('togglemicrophone', () => this.toggleMic()); } catch (e) { /* unsupported */ }
+                try { ms.setActionHandler('hangup', () => this.leave(false)); } catch (e) { /* unsupported */ }
+                this.mediaSessionOn = true;
+            }
+            const me = s.me;
+            if (typeof ms.setMicrophoneActive === 'function' && me && ROLE_SPEAKS[me.role]) {
+                try { ms.setMicrophoneActive(!me.self_muted); } catch (e) { /* optional */ }
+            }
+        }
+
+        // ─── Pop-out window, media controls and the bar on other pages ──────
+
+        afterRender() {
+            if (this.pip && !this.joined) { this.closePip(); return; }
+            this.renderPip();
+            this.setMediaSession();
+            this.announcePresence();
+        }
+
+        /** Document Picture-in-Picture: a small always-on-top window (Chrome and Edge on desktop). */
+        pipSupported() {
+            return Boolean(this.joined && window.isSecureContext && 'documentPictureInPicture' in window);
+        }
+
+        async openPip() {
+            if (this.pip || !this.pipSupported()) return;
+            let win;
             try {
-                navigator.mediaSession.metadata = new window.MediaMetadata({
-                    title: this.state.room.title,
-                    artist: (this.config.branding && this.config.branding.name) || '',
-                });
-                navigator.mediaSession.playbackState = this.joined ? 'playing' : 'none';
-            } catch (e) { /* optional */ }
+                win = await window.documentPictureInPicture.requestWindow({ width: 340, height: 440 });
+            } catch (e) {
+                return;
+            }
+            document.querySelectorAll('link[rel="stylesheet"]').forEach((link) => {
+                if (!/audio-rooms\.css/.test(link.href)) return;
+                const copy = win.document.createElement('link');
+                copy.rel = 'stylesheet';
+                copy.href = link.href;
+                win.document.head.appendChild(copy);
+            });
+            win.document.title = this.state ? this.state.room.title : '';
+            win.document.body.className = 'car-pip-body';
+            const root = win.document.createElement('div');
+            root.className = 'car-root car-pip';
+            root.setAttribute('data-theme', this.el.getAttribute('data-theme') || 'light');
+            if (this.el.getAttribute('style')) root.setAttribute('style', this.el.getAttribute('style'));
+            win.document.body.appendChild(root);
+            root.addEventListener('click', (e) => this.onPipClick(e));
+            win.addEventListener('pagehide', () => {
+                if (this.pip && this.pip.win === win) {
+                    this.pip = null;
+                    this.render();
+                }
+            });
+            this.pip = { win, root, leaveArmedAt: 0 };
+            this.render();
+        }
+
+        closePip() {
+            if (!this.pip) return;
+            const win = this.pip.win;
+            this.pip = null;
+            try { win.close(); } catch (e) { /* already closed */ }
+            this.render();
+        }
+
+        renderPip() {
+            const pip = this.pip;
+            if (!pip || !this.state) return;
+            const s = this.state;
+            const me = s.me;
+            const voices = (s.hosts || []).concat(s.speakers || []);
+            const people = voices.map((m) => {
+                const muted = m.self_muted || m.moderator_muted;
+                return '<li class="car-pip-person" data-person="' + esc(m.key) + '">' +
+                    avatarHtml(m, 'md', muted ? '<span class="car-pip-muted" title="' + esc(this.tr('muted')) + '">' + ICONS.micOff + '</span>' : '') +
+                    '<span class="car-pip-name">' + esc(me && m.key === me.key ? this.tr('you') : m.name) + '</span></li>';
+            }).join('');
+            const controls = [];
+            if (me && ROLE_SPEAKS[me.role]) {
+                const live = !me.self_muted;
+                controls.push('<button type="button" class="car-btn ' + (live ? 'car-btn--primary' : 'car-btn--mic-off') + '" data-action="mic" aria-pressed="' + live + '">' +
+                    (live ? ICONS.mic : ICONS.micOff) + '<span>' + esc(this.tr(live ? 'mic_on' : 'mic_off')) + '</span></button>');
+            } else if (s.can.request_to_speak) {
+                controls.push('<button type="button" class="car-btn car-btn--hand' + (me.hand_raised ? ' car-btn--primary is-raised' : '') + '" data-action="hand" aria-pressed="' + Boolean(me.hand_raised) + '">' + ICONS.hand +
+                    '<span>' + esc(this.tr(me.hand_raised ? 'lower_hand' : 'raise_hand')) + '</span></button>');
+            }
+            controls.push('<span class="car-controls-spacer"></span>');
+            controls.push('<button type="button" class="car-btn" data-action="pip-back" title="' + esc(this.tr('pop_in')) + '" aria-label="' + esc(this.tr('pop_in')) + '">' + ICONS.pip + '</button>');
+            const armed = Date.now() - pip.leaveArmedAt < 4000;
+            controls.push('<button type="button" class="car-btn' + (armed ? ' car-btn--danger' : '') + '" data-action="pip-leave">' + ICONS.leave +
+                '<span>' + esc(armed ? this.tr('pop_leave_again') : this.tr('leave')) + '</span></button>');
+            pip.root.innerHTML =
+                '<header class="car-pip-head"><span class="car-badge car-badge--live">' + esc(this.tr('live')) + '</span>' +
+                    '<span class="car-pip-title">' + esc(s.room.title) + '</span>' +
+                    '<span class="car-pip-count">' + ICONS.users + esc(String(s.counts.people)) + '</span></header>' +
+                (this.notice && this.notice.kind !== 'info' ? '<p class="car-pip-note">' + esc(this.notice.text) + '</p>' : '') +
+                '<ul class="car-pip-people">' + (people || '<li class="car-pip-empty">' + esc(this.tr('empty_stage')) + '</li>') + '</ul>' +
+                '<div class="car-controls car-pip-controls">' + controls.join('') + '</div>';
+            pip.root.querySelectorAll('[data-person]').forEach((node) => node.classList.toggle('is-speaking', this.speaking.has(node.getAttribute('data-person'))));
+        }
+
+        async onPipClick(e) {
+            const button = e.target.closest('[data-action]');
+            if (!button || !this.pip) return;
+            switch (button.getAttribute('data-action')) {
+                case 'mic': return this.toggleMic();
+                case 'hand': return this.action('/hand', { raised: !(this.state.me && this.state.me.hand_raised) });
+                case 'pip-back':
+                    this.closePip();
+                    try { window.focus(); } catch (err) { /* not allowed */ }
+                    return;
+                case 'pip-leave':
+                    // No dialog in the small window: a second tap within a few seconds leaves.
+                    if (Date.now() - this.pip.leaveArmedAt < 4000) { await this.leave(false); return; }
+                    this.pip.leaveArmedAt = Date.now();
+                    this.renderPip();
+                    setTimeout(() => this.renderPip(), 4100);
+                    return;
+                default:
+                    return;
+            }
+        }
+
+        /** Tell other pages of this site (same browser) that this tab is in a room; see audio-rooms-bar.js. */
+        announcePresence(force) {
+            if (!this.channel) return;
+            if (!this.joined || !this.state) {
+                if (this.presenceRoom) {
+                    this.channel.postMessage({ type: 'left', room: this.presenceRoom });
+                    this.presenceRoom = null;
+                    this.presenceSig = null;
+                }
+                return;
+            }
+            const s = this.state;
+            const me = s.me;
+            const info = {
+                type: 'room',
+                room: s.room.id,
+                title: s.room.title,
+                url: window.location.href.split('#')[0],
+                monitor: Boolean(this.asMonitor),
+                speaks: Boolean(me && ROLE_SPEAKS[me.role]),
+                muted: Boolean(!me || me.self_muted),
+                moderator_muted: Boolean(me && me.moderator_muted),
+                // The microphone can be switched on from another page only when it is already open here (no hidden permission prompt).
+                mic_ready: Boolean(this.localStream && this.localStream.getAudioTracks().some((t) => t.readyState === 'live')),
+            };
+            const sig = JSON.stringify(info);
+            if (!force && sig === this.presenceSig && Date.now() - (this.presenceAt || 0) < 2900) return;
+            this.presenceSig = sig;
+            this.presenceAt = Date.now();
+            this.presenceRoom = s.room.id;
+            this.channel.postMessage(Object.assign({ at: Date.now() }, info));
+        }
+
+        onChannelMessage(msg) {
+            if (!msg || !this.joined || !this.state) return;
+            if (msg.type === 'ping') { this.announcePresence(true); return; }
+            if (msg.type === 'taken-over' && msg.room === this.state.room.id) { this.handleError({ code: 'replaced', body: {} }); return; }
+            if (msg.type !== 'command' || msg.room !== this.state.room.id) return;
+            if (msg.action === 'mic') this.toggleMic();
+            if (msg.action === 'leave') this.leave(false);
         }
 
         closePeer(key, notify) {
@@ -1174,7 +1397,7 @@
                 return Math.sqrt(sum / meter.data.length);
             };
             this.levelTimer = setInterval(() => {
-                if (document.hidden) return;
+                if (document.hidden && !this.pip) return;
                 const me = this.state && this.state.me;
                 const now = Date.now();
                 this.peers.forEach((peer, key) => {
@@ -1197,6 +1420,9 @@
                 if (!changed) return;
                 this.speaking = next;
                 this.el.querySelectorAll('[data-person]').forEach((node) => {
+                    node.classList.toggle('is-speaking', next.has(node.getAttribute('data-person')));
+                });
+                if (this.pip) this.pip.root.querySelectorAll('[data-person]').forEach((node) => {
                     node.classList.toggle('is-speaking', next.has(node.getAttribute('data-person')));
                 });
             }, 200);
@@ -1268,6 +1494,7 @@
                     if (await this.confirm(this.tr('end_confirm'), this.tr('end'))) await this.action('/end');
                     return;
                 case 'mic': return this.toggleMic();
+                case 'pip': return this.pip ? this.closePip() : this.openPip();
                 case 'hand': {
                     const raised = Boolean(this.state.me && this.state.me.hand_raised);
                     const ok = raised
@@ -1498,6 +1725,7 @@
                 const node = this.el.querySelector(focus);
                 if (node) node.focus({ preventScroll: true });
             }
+            this.afterRender();
         }
 
         /** Keep an open member menu on screen (flip it toward the other edge near the side of the page). */
@@ -1775,6 +2003,10 @@
                     '<span class="car-btn-label--hide-sm">' + esc(this.tr('requests')) + '</span><span class="car-btn-count">' + waiting + '</span></button>');
             }
 
+            if (this.pipSupported()) {
+                out.push('<button type="button" class="car-btn" data-action="pip" aria-pressed="' + Boolean(this.pip) + '" title="' + esc(this.tr('pop_out_hint')) + '" aria-label="' + esc(this.tr(this.pip ? 'pop_in' : 'pop_out')) + '">' + ICONS.pip +
+                    '<span class="car-btn-label--hide-sm">' + esc(this.tr(this.pip ? 'pop_in' : 'pop_out')) + '</span></button>');
+            }
             out.push('<span class="car-controls-spacer"></span>');
             if (s.can.end) out.push('<button type="button" class="car-btn car-btn--danger" data-action="end" aria-label="' + esc(this.tr('end')) + '">' + ICONS.end + '<span class="car-btn-label--hide-sm">' + esc(this.tr('end')) + '</span></button>');
             out.push('<button type="button" class="car-btn" data-action="leave">' + ICONS.leave + '<span class="car-btn-label--hide-sm">' + esc(this.tr('leave')) + '</span></button>');

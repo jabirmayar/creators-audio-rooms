@@ -10,5 +10,7 @@
     <main class="car-page">
         @yield('content')
     </main>
+    {{-- While a room is open in another tab: a small bar to get back to it (does nothing on the room page). --}}
+    <x-creators-audio-rooms::room-bar />
 </body>
 </html>

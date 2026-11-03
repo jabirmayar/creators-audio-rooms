@@ -55,4 +55,14 @@ class HostingTest extends ApiTestCase
 
         $this->assertSame('', trim(Blade::render('<x-creators-audio-rooms::live-now />')));
     }
+
+    public function test_room_bar_component_loads_its_assets_and_labels_once(): void
+    {
+        $html = Blade::render('<x-creators-audio-rooms::room-bar /><x-creators-audio-rooms::room-bar />');
+
+        $this->assertSame(1, substr_count($html, 'audio-rooms-bar.js'));
+        $this->assertStringContainsString('audio-rooms-bar.css', $html);
+        $this->assertStringContainsString('data-audio-rooms-bar=', $html);
+        $this->assertStringContainsString(e(__('creators-audio-rooms::messages.ui.bar_back')), $html);
+    }
 }

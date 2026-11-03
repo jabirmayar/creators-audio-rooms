@@ -155,6 +155,18 @@ Show live rooms on a home page or dashboard, the way social apps show live audio
 
 It lists the live rooms the signed-in visitor may join (speaker faces, title, host, people count and a Listen button), refreshes itself, hides when nothing is live, renders nothing for guests, and leaves out the room already open on the page.
 
+### Staying in a room while doing something else
+
+- **Pop out** (Chrome and Edge on desktop): a button in the room opens a small always-on-top window with who is speaking, the microphone or raise-hand button and Leave. The room keeps running in its tab.
+- **Media controls**: while in a room, the lock screen, phone notification and browser media controls show the room title and host; where the browser offers them, its microphone and hang-up buttons work.
+- **Room bar on other pages**: put this once in your layout (e.g. before `</body>`):
+
+```blade
+<x-creators-audio-rooms::room-bar />
+```
+
+While a room is open in another tab of the same browser, a small bar shows its title, a microphone button (once the microphone has been opened in the room) and **Back to room**, which carries the room on in that tab (the other tab steps aside). It does nothing on the room page and sends nothing to the server; it only works with a tab of the same browser that really is in the room, so a shared link cannot put anyone in one. The package's own page layout already includes it.
+
 ### Creating rooms from your own code
 
 ```php
