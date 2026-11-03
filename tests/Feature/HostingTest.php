@@ -61,7 +61,9 @@ class HostingTest extends ApiTestCase
         $html = Blade::render('<x-creators-audio-rooms::room-bar /><x-creators-audio-rooms::room-bar />');
 
         $this->assertSame(1, substr_count($html, 'audio-rooms-bar.js'));
-        $this->assertStringContainsString('audio-rooms-bar.css', $html);
+        // The stylesheet is only referenced (loaded by the script when a bar is shown), never linked up front.
+        $this->assertStringContainsString('data-css="', $html);
+        $this->assertStringNotContainsString('<link rel="stylesheet"', $html);
         $this->assertStringContainsString('data-audio-rooms-bar=', $html);
         $this->assertStringContainsString(e(__('creators-audio-rooms::messages.ui.bar_back')), $html);
     }

@@ -1330,6 +1330,26 @@
             this.channel.postMessage(Object.assign({ at: Date.now() }, info));
         }
 
+        /**
+         * Microphone button in the bar on another tab. Turning it on when this tab has not opened the microphone
+         * yet would show the browser's permission prompt here, out of sight: only go ahead when the site already
+         * has permission (the bar asks for it in its own tab first); otherwise ask the person to come to the room.
+         */
+        async toggleMicFromElsewhere() {
+            const me = this.state && this.state.me;
+            if (!me || !ROLE_SPEAKS[me.role]) return;
+            const opening = me.self_muted && !(this.localStream && this.localStream.getAudioTracks().some((t) => t.readyState === 'live'));
+            if (opening) {
+                let state = 'unknown';
+                try { state = (await navigator.permissions.query({ name: 'microphone' })).state; } catch (e) { /* not supported */ }
+                if (state !== 'granted') {
+                    if (this.channel) this.channel.postMessage({ type: 'mic-needs-room', room: this.state.room.id });
+                    return;
+                }
+            }
+            this.toggleMic();
+        }
+
         /** Runs after the page's own handlers: a link they already handled (menus, modals) is left alone. */
         keepRoomOnLinkClick(e) {
             if (!this.joined || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -1350,7 +1370,7 @@
             if (msg.type === 'ping') { this.announcePresence(true); return; }
             if (msg.type === 'taken-over' && msg.room === this.state.room.id) { this.handleError({ code: 'replaced', body: {} }); return; }
             if (msg.type !== 'command' || msg.room !== this.state.room.id) return;
-            if (msg.action === 'mic') this.toggleMic();
+            if (msg.action === 'mic') this.toggleMicFromElsewhere();
             if (msg.action === 'leave') this.leave(false);
         }
 

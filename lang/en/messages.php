@@ -34,6 +34,8 @@ return [
         'bar_label' => 'Audio room',
         'bar_in_room' => 'You are in',
         'bar_back' => 'Back to room',
+        'bar_mic_blocked' => 'Microphone blocked: allow it for this site to speak',
+        'bar_mic_in_room' => 'Open the room to allow the microphone',
         'leave_confirm' => 'Leave this room?',
         'leave_confirm_handover' => ':name becomes the host.',
         'leave_confirm_host' => 'You are the only host. The room ends in a couple of minutes unless a host comes back.',

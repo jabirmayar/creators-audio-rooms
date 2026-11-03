@@ -17,9 +17,12 @@
             'back' => __('creators-audio-rooms::messages.ui.bar_back'),
             'mic_on' => __('creators-audio-rooms::messages.ui.mic_on'),
             'mic_off' => __('creators-audio-rooms::messages.ui.mic_off'),
+            'mic_blocked' => __('creators-audio-rooms::messages.ui.bar_mic_blocked'),
+            'mic_in_room' => __('creators-audio-rooms::messages.ui.bar_mic_in_room'),
         ];
     @endphp
-    <link rel="stylesheet" href="{{ asset($base.'audio-rooms-bar.css') }}{{ $version('audio-rooms-bar.css') ? '?v='.$version('audio-rooms-bar.css') : '' }}">
+    {{-- Only the small script loads with the page (after it, not blocking it); the stylesheet loads when a bar is shown. --}}
     <script src="{{ asset($base.'audio-rooms-bar.js') }}{{ $version('audio-rooms-bar.js') ? '?v='.$version('audio-rooms-bar.js') : '' }}" defer></script>
-    <div data-audio-rooms-bar="{{ json_encode($labels, JSON_UNESCAPED_UNICODE) }}" hidden></div>
+    <div data-audio-rooms-bar="{{ json_encode($labels, JSON_UNESCAPED_UNICODE) }}"
+         data-css="{{ asset($base.'audio-rooms-bar.css') }}{{ $version('audio-rooms-bar.css') ? '?v='.$version('audio-rooms-bar.css') : '' }}" hidden></div>
 @endonce

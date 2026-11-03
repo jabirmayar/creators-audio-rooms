@@ -33,21 +33,50 @@
 
         let info = null;
         let staleTimer = null;
+        let message = null;      // short note in place of "You are in", e.g. microphone blocked
+        let messageTimer = null;
+
+        function say(text) {
+            message = text;
+            clearTimeout(messageTimer);
+            messageTimer = setTimeout(() => { message = null; render(); }, 6000);
+            render();
+        }
+
+        // The stylesheet is fetched the first time a bar is shown, so pages without a room pay nothing for it.
+        // The bar appears once it has loaded (never unstyled).
+        let styles = null;
+        function loadStyles() {
+            if (styles) return styles;
+            const href = holder.getAttribute('data-css');
+            styles = new Promise((resolve) => {
+                if (!href || document.querySelector('link[href="' + href + '"]')) { resolve(); return; }
+                const link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = href;
+                link.onload = () => resolve();
+                link.onerror = () => resolve();
+                document.head.appendChild(link);
+            });
+            styles.then(() => { styles.ready = true; render(); });
+            return styles;
+        }
 
         function render() {
+            if (info && !(styles && styles.ready)) { loadStyles(); return; }
             if (!info) {
                 bar.hidden = true;
                 bar.innerHTML = '';
                 document.documentElement.classList.remove('car-bar-open');
                 return;
             }
-            const mic = info.speaks && info.mic_ready
+            const mic = info.speaks
                 ? '<button type="button" class="car-bar-btn' + (info.muted ? ' is-off' : ' is-live') + '" data-bar="mic" aria-pressed="' + !info.muted + '"' + (info.moderator_muted ? ' disabled' : '') + '>' +
                     (info.muted ? MIC_OFF : MIC) + '<span>' + esc(info.muted ? t.mic_off : t.mic_on) + '</span></button>'
                 : '';
             bar.innerHTML =
                 '<span class="car-bar-dot" aria-hidden="true"></span>' +
-                '<span class="car-bar-text"><span class="car-bar-label">' + esc(t.in_room) + '</span>' +
+                '<span class="car-bar-text"><span class="car-bar-label' + (message ? ' is-note' : '') + '">' + esc(message || t.in_room) + '</span>' +
                 '<span class="car-bar-title">' + esc(info.title) + '</span></span>' +
                 mic +
                 '<button type="button" class="car-bar-btn car-bar-btn--primary" data-bar="back">' + esc(t.back) + '</button>';
@@ -62,20 +91,43 @@
                 clearTimeout(staleTimer);
                 staleTimer = setTimeout(() => { info = null; render(); }, STALE_MS);
                 render();
+            } else if (msg.type === 'mic-needs-room' && info && msg.room === info.room) {
+                info.muted = true;
+                say(t.mic_in_room);
             } else if (msg.type === 'left' && info && msg.room === info.room) {
                 info = null;
                 render();
             }
         };
 
+        /**
+         * Microphone permission belongs to the site, not the tab: when the room has not opened the microphone
+         * yet, ask here (where the person is looking), so the room tab can switch it on without a hidden prompt.
+         */
+        async function toggleMic() {
+            const room = info;
+            if (room.muted && !room.mic_ready) {
+                if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { say(t.mic_in_room); return; }
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    stream.getTracks().forEach((track) => track.stop());
+                } catch (err) {
+                    say(t.mic_blocked);
+                    return;
+                }
+                if (!info || info.room !== room.room) return;
+            }
+            // Shown at once; the room tab confirms with its next message.
+            info.muted = !info.muted;
+            render();
+            channel.postMessage({ type: 'command', room: info.room, action: 'mic' });
+        }
+
         bar.addEventListener('click', (e) => {
             const button = e.target.closest('[data-bar]');
             if (!button || !info) return;
             if (button.getAttribute('data-bar') === 'mic') {
-                // Shown at once; the room tab confirms with its next message.
-                info.muted = !info.muted;
-                render();
-                channel.postMessage({ type: 'command', room: info.room, action: 'mic' });
+                toggleMic();
                 return;
             }
             // Browsers do not let a page bring another tab to the front, so the room carries on in this tab
