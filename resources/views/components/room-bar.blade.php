@@ -17,6 +17,9 @@
             'back' => __('creators-audio-rooms::messages.ui.bar_back'),
             'mic_on' => __('creators-audio-rooms::messages.ui.mic_on'),
             'mic_off' => __('creators-audio-rooms::messages.ui.mic_off'),
+            'speaking_you' => __('creators-audio-rooms::messages.ui.bar_speaking_you'),
+            'speaking_one' => __('creators-audio-rooms::messages.ui.bar_speaking_one'),
+            'speaking_many' => __('creators-audio-rooms::messages.ui.bar_speaking_many'),
             'mic_blocked' => __('creators-audio-rooms::messages.ui.bar_mic_blocked'),
             'mic_in_room' => __('creators-audio-rooms::messages.ui.bar_mic_in_room'),
         ];

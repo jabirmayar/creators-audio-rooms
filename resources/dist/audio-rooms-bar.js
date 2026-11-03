@@ -78,9 +78,14 @@
                 ? '<button type="button" class="car-bar-btn' + (info.muted ? ' is-off' : ' is-live') + '" data-bar="mic" aria-pressed="' + !info.muted + '"' + (info.moderator_muted ? ' disabled' : '') + '>' +
                     (info.muted ? MIC_OFF : MIC) + '<span>' + esc(info.muted ? t.mic_off : t.mic_on) + '</span></button>'
                 : '';
+            const speaking = (info.speaking || []).filter(Boolean);
+            if (info.speaking_self && !speaking.length) speaking.push('');
+            const label = message || (!speaking.length ? t.in_room
+                : speaking[0] === '' ? t.speaking_you
+                : (speaking.length === 1 ? t.speaking_one : t.speaking_many).replace(':names', speaking.join(', ')));
             bar.innerHTML =
-                '<span class="car-bar-icon" aria-hidden="true">' + HEADPHONES + '<span class="car-bar-dot"></span></span>' +
-                '<span class="car-bar-text"><span class="car-bar-label' + (message ? ' is-note' : '') + '">' + esc(message || t.in_room) + '</span>' +
+                '<span class="car-bar-icon' + (speaking.length ? ' is-speaking' : '') + '" aria-hidden="true">' + HEADPHONES + '<span class="car-bar-dot"></span></span>' +
+                '<span class="car-bar-text"><span class="car-bar-label' + (message ? ' is-note' : (speaking.length ? ' is-speaking' : '')) + '">' + esc(label) + '</span>' +
                 '<span class="car-bar-title">' + esc(info.title) + '</span></span>' +
                 mic +
                 '<button type="button" class="car-bar-btn car-bar-btn--primary" data-bar="back">' + esc(t.back) + '</button>';
@@ -91,7 +96,9 @@
         channel.onmessage = (e) => {
             const msg = e.data || {};
             if (msg.type === 'room') {
+                const first = !info;
                 info = msg;
+                if (first) watching();
                 clearTimeout(staleTimer);
                 staleTimer = setTimeout(() => { info = null; render(); }, STALE_MS);
                 render();
@@ -166,6 +173,11 @@
             }
             backToRoom();
         });
+
+        // While this bar is on screen, the room tab keeps measuring who speaks (it saves battery otherwise).
+        const watching = () => { if (info && !document.hidden) channel.postMessage({ type: 'watching', room: info.room }); };
+        setInterval(watching, 4000);
+        document.addEventListener('visibilitychange', watching);
 
         // A room tab that is already open answers straight away.
         channel.postMessage({ type: 'ping' });

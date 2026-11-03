@@ -222,7 +222,7 @@
             if (this.channel) {
                 this.channel.onmessage = (e) => this.onChannelMessage(e.data);
                 setInterval(() => this.announcePresence(), 3000);
-                window.addEventListener('pagehide', () => { if (this.presenceRoom) this.channel.postMessage({ type: 'left', room: this.presenceRoom }); });
+                window.addEventListener('pagehide', () => { if (this.presenceRoom) this.channel.postMessage({ type: 'left', room: this.presenceRoom, reason: 'closed' }); });
             }
             this.clock = setInterval(() => {
                 this.el.querySelectorAll('[data-live-for]').forEach((node) => { node.textContent = liveFor(node.getAttribute('data-live-for'), this.t); });
@@ -1302,7 +1302,7 @@
             if (!this.channel) return;
             if (!this.joined || !this.state) {
                 if (this.presenceRoom) {
-                    this.channel.postMessage({ type: 'left', room: this.presenceRoom });
+                    this.channel.postMessage({ type: 'left', room: this.presenceRoom, reason: this.status });
                     this.presenceRoom = null;
                     this.presenceSig = null;
                 }
@@ -1319,6 +1319,8 @@
                 speaks: Boolean(me && ROLE_SPEAKS[me.role]),
                 muted: Boolean(!me || me.self_muted),
                 moderator_muted: Boolean(me && me.moderator_muted),
+                speaking: this.speakingNames(),
+                speaking_self: Boolean(me && this.speaking.has(me.key)),
                 // The microphone can be switched on from another page only when it is already open here (no hidden permission prompt).
                 mic_ready: Boolean(this.localStream && this.localStream.getAudioTracks().some((t) => t.readyState === 'live')),
             };
@@ -1365,10 +1367,77 @@
             window.open(url.href, '_blank');
         }
 
+        /** Names of the others speaking now (for the bar on other tabs; the person themselves is speaking_self). */
+        speakingNames() {
+            const me = this.state && this.state.me;
+            const names = [];
+            this.speaking.forEach((key) => {
+                const m = this.members().find((x) => x.key === key);
+                if (m && !(me && key === me.key)) names.push(m.name);
+            });
+            return names.slice(0, 3);
+        }
+
+        /**
+         * Replaced by another tab of this same browser: watch that tab. When it is closed (or its check-ins stop,
+         * as when a phone discards it) without the person leaving, take the room back here. Never for a takeover
+         * from another device, and only for half an hour.
+         */
+        watchForTakeBack() {
+            this.stopTakeBack();
+            const started = Date.now();
+            this.takeBack = { seenAt: started };
+            this.takeBack.timer = setInterval(() => {
+                if (this.status !== 'replaced' || Date.now() - started > 30 * 60 * 1000) { this.stopTakeBack(); return; }
+                if (Date.now() - this.takeBack.seenAt > 8000) this.maybeTakeBack({ room: this.state.room.id });
+            }, 2000);
+        }
+
+        stopTakeBack() {
+            if (this.takeBack) clearInterval(this.takeBack.timer);
+            this.takeBack = null;
+        }
+
+        /**
+         * This tab was replaced by another tab of this browser, and that tab has now been closed (not left):
+         * take the room back here, unless the other tab was only reloading (it rejoins by itself).
+         */
+        maybeTakeBack(msg) {
+            if (!this.takeBack || this.status !== 'replaced' || !this.state || msg.room !== this.state.room.id || this.state.room.status === 'ended') return;
+            if (this.takeBack.pending) return;
+            this.takeBack.pending = true;
+            clearTimeout(this.takeBackTimer);
+            this.takeBackTimer = setTimeout(() => {
+                const check = new BroadcastChannel('creators-audio-rooms');
+                let answered = false;
+                check.onmessage = (e) => { if (e.data && e.data.type === 'room' && e.data.room === msg.room) answered = true; };
+                if (this.takeBack) this.takeBack.pending = false;
+                check.postMessage({ type: 'ping' });
+                setTimeout(() => {
+                    check.close();
+                    if (answered || this.status !== 'replaced') return;
+                    this.stopTakeBack();
+                    this.notice = null;
+                    this.join(Boolean(this.asMonitor));
+                }, 1200);
+            }, 2500);
+        }
+
         onChannelMessage(msg) {
+            if (msg && !this.joined && this.takeBack && this.state && msg.room === this.state.room.id) {
+                if (msg.type === 'room') this.takeBack.seenAt = Date.now();
+                // Closed: take the room back. Left on purpose (or removed, ended…): stay out.
+                if (msg.type === 'left') { if (msg.reason === 'closed') this.maybeTakeBack(msg); else this.stopTakeBack(); }
+                return;
+            }
             if (!msg || !this.joined || !this.state) return;
             if (msg.type === 'ping') { this.announcePresence(true); return; }
-            if (msg.type === 'taken-over' && msg.room === this.state.room.id) { this.handleError({ code: 'replaced', body: {} }); return; }
+            if (msg.type === 'watching' && msg.room === this.state.room.id) { this.watchedAt = Date.now(); return; }
+            if (msg.type === 'taken-over' && msg.room === this.state.room.id) {
+                this.handleError({ code: 'replaced', body: {} });
+                this.watchForTakeBack();
+                return;
+            }
             if (msg.type !== 'command' || msg.room !== this.state.room.id) return;
             if (msg.action === 'mic') this.toggleMicFromElsewhere();
             if (msg.action === 'leave') this.leave(false);
@@ -1463,7 +1532,8 @@
                 return Math.sqrt(sum / meter.data.length);
             };
             this.levelTimer = setInterval(() => {
-                if (document.hidden && !this.pip) return;
+                // Hidden tab: only keep measuring while the mini player or a bar on another tab shows it.
+                if (document.hidden && !this.pip && !(this.watchedAt && Date.now() - this.watchedAt < 9000)) return;
                 const me = this.state && this.state.me;
                 const now = Date.now();
                 this.peers.forEach((peer, key) => {
@@ -1491,6 +1561,7 @@
                 if (this.pip) this.pip.root.querySelectorAll('[data-person]').forEach((node) => {
                     node.classList.toggle('is-speaking', next.has(node.getAttribute('data-person')));
                 });
+                this.announcePresence();
             }, 200);
         }
 
