@@ -736,12 +736,13 @@
         }
 
         newPeer(key, signature) {
-            const config = { iceServers: this.iceServers, bundlePolicy: 'max-bundle' };
-            // Relay-only only when a relay was handed out; otherwise links could never form.
-            if (this.iceTransportPolicy === 'relay' && this.hasRelay()) config.iceTransportPolicy = 'relay';
-            const pc = new RTCPeerConnection(config);
             const attempt = (this.linkAttempts.get(key) || 0) + 1;
             this.linkAttempts.set(key, attempt);
+            const config = { iceServers: this.iceServers, bundlePolicy: 'max-bundle' };
+            // Relay-only only when a relay was handed out (otherwise links could never form), and only for the
+            // first try: if the relay cannot be reached, later tries may also connect directly.
+            if (this.iceTransportPolicy === 'relay' && this.hasRelay() && attempt === 1) config.iceTransportPolicy = 'relay';
+            const pc = new RTCPeerConnection(config);
             const peer = { pc, signature, audio: null, stream: null, pending: [], outbox: [], outboxTimer: null, restarts: 0, remoteSet: false, attempt, candidateTypes: new Set(), watchdog: null, initiator: false };
             this.peers.set(key, peer);
             this.armWatchdog(key, 15000);

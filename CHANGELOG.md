@@ -7,6 +7,7 @@ All notable changes to this package are documented here. The format follows [Kee
 ### Fixed
 
 - With `ice_transport_policy` set to `relay`, a join that got no relay server (for example while Cloudflare is unreachable) left people unable to connect to anyone. Relay-only now applies only when a relay server is handed out; otherwise the room connects directly as with `all`.
+- With `ice_transport_policy` set to `relay`, a relay that could not be reached (blocked network, relay outage) meant the link never formed. Relay-only now applies to the first try only; when it fails, later tries may also connect directly (the relay stays available to them).
 
 ## 1.8.3 - 2026-11-02
 
