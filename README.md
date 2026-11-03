@@ -157,7 +157,8 @@ It lists the live rooms the signed-in visitor may join (speaker faces, title, ho
 
 ### Staying in a room while doing something else
 
-- **Pop out** (Chrome and Edge on desktop): a button in the room opens a small always-on-top window with who is speaking, the microphone or raise-hand button and Leave. The room keeps running in its tab.
+- **Mini player** (Chrome and Edge on desktop): a button in the room opens a small always-on-top window with the speakers (and their roles), the listeners, the microphone or raise-hand button and Leave. The room keeps running in its tab.
+- **Links open in a new tab while in a room**, so going to another page does not end the room (set `links_in_new_tab` to `false` to turn this off).
 - **Media controls**: while in a room, the lock screen, phone notification and browser media controls show the room title and host; where the browser offers them, its microphone and hang-up buttons work.
 - **Room bar on other pages**: put this once in your layout (e.g. before `</body>`):
 

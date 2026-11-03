@@ -170,6 +170,12 @@ return [
     'diagnostics' => env('AUDIO_ROOMS_DIAGNOSTICS', true),
 
     /*
+    | While someone is in a room, links to your site's other pages open in a new
+    | tab, so the room (and its mini player) keeps playing. Set false to turn off.
+    */
+    'links_in_new_tab' => env('AUDIO_ROOMS_LINKS_IN_NEW_TAB', true),
+
+    /*
     | Audio sent by each speaker. A cap keeps uploads small when one speaker
     | sends to many listeners (32 kbps Opus is clear for speech).
     */

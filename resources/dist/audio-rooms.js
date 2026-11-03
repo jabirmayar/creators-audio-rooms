@@ -216,6 +216,8 @@
 
             this.bindLifecycle();
             this.pip = null;
+            // While in the room, links to the site's other pages open in a new tab, so the room keeps playing.
+            if (this.config.links_in_new_tab !== false) document.addEventListener('click', (e) => this.keepRoomOnLinkClick(e));
             this.channel = 'BroadcastChannel' in window ? new BroadcastChannel('creators-audio-rooms') : null;
             if (this.channel) {
                 this.channel.onmessage = (e) => this.onChannelMessage(e.data);
@@ -1175,8 +1177,15 @@
             } catch (e) {
                 return;
             }
+            // The room's styles, ready from the first frame (rules already loaded in this page), with the
+            // stylesheet link as a fallback where they cannot be read or adopted.
             document.querySelectorAll('link[rel="stylesheet"]').forEach((link) => {
                 if (!/audio-rooms\.css/.test(link.href)) return;
+                try {
+                    const sheet = new win.CSSStyleSheet();
+                    sheet.replaceSync(Array.from(link.sheet.cssRules).map((r) => r.cssText).join('\n'));
+                    win.document.adoptedStyleSheets = [sheet];
+                } catch (e) { /* the link below still loads them */ }
                 const copy = win.document.createElement('link');
                 copy.rel = 'stylesheet';
                 copy.href = link.href;
@@ -1213,13 +1222,24 @@
             if (!pip || !this.state) return;
             const s = this.state;
             const me = s.me;
+            const nameOf = (m) => (me && m.key === me.key ? this.tr('you') : m.name);
             const voices = (s.hosts || []).concat(s.speakers || []);
             const people = voices.map((m) => {
                 const muted = m.self_muted || m.moderator_muted;
+                const role = m.role === 'host' || m.role === 'co_host'
+                    ? '<span class="car-pip-role car-pip-role--' + esc(m.role) + '">' + (m.role === 'host' ? ICONS.crown : ICONS.star) + esc(this.tr(m.role)) + '</span>'
+                    : '<span class="car-pip-role">' + esc(this.tr('speaker')) + '</span>';
                 return '<li class="car-pip-person" data-person="' + esc(m.key) + '">' +
                     avatarHtml(m, 'md', muted ? '<span class="car-pip-muted" title="' + esc(this.tr('muted')) + '">' + ICONS.micOff + '</span>' : '') +
-                    '<span class="car-pip-name">' + esc(me && m.key === me.key ? this.tr('you') : m.name) + '</span></li>';
+                    '<span class="car-pip-name">' + esc(nameOf(m)) + '</span>' + role + '</li>';
             }).join('');
+            const listeners = s.listeners || [];
+            const shown = listeners.slice(0, 6);
+            const listenerRow = listeners.length
+                ? '<div class="car-pip-listeners"><span class="car-pip-section">' + ICONS.headphones + esc(this.tr('listeners')) + ' · ' + listeners.length + '</span>' +
+                    '<span class="car-pip-faces">' + shown.map((m) => '<span title="' + esc(nameOf(m)) + '">' + avatarHtml(m, 'xs') + '</span>').join('') +
+                    (listeners.length > shown.length ? '<span class="car-pip-more">+' + (listeners.length - shown.length) + '</span>' : '') + '</span></div>'
+                : '';
             const controls = [];
             if (me && ROLE_SPEAKS[me.role]) {
                 const live = !me.self_muted;
@@ -1230,16 +1250,20 @@
                     '<span>' + esc(this.tr(me.hand_raised ? 'lower_hand' : 'raise_hand')) + '</span></button>');
             }
             controls.push('<span class="car-controls-spacer"></span>');
-            controls.push('<button type="button" class="car-btn" data-action="pip-back" title="' + esc(this.tr('pop_in')) + '" aria-label="' + esc(this.tr('pop_in')) + '">' + ICONS.pip + '</button>');
+            controls.push('<button type="button" class="car-btn car-btn--icon" data-action="pip-back" title="' + esc(this.tr('pop_in')) + '" aria-label="' + esc(this.tr('pop_in')) + '">' + ICONS.pip + '</button>');
             const armed = Date.now() - pip.leaveArmedAt < 4000;
-            controls.push('<button type="button" class="car-btn' + (armed ? ' car-btn--danger' : '') + '" data-action="pip-leave">' + ICONS.leave +
-                '<span>' + esc(armed ? this.tr('pop_leave_again') : this.tr('leave')) + '</span></button>');
+            controls.push('<button type="button" class="car-btn car-btn--icon' + (armed ? ' car-btn--danger' : '') + '" data-action="pip-leave" title="' + esc(armed ? this.tr('pop_leave_again') : this.tr('leave')) + '" aria-label="' + esc(armed ? this.tr('pop_leave_again') : this.tr('leave')) + '">' +
+                ICONS.leave + (armed ? '<span>' + esc(this.tr('pop_leave_confirm')) + '</span>' : '') + '</button>');
+            // Only connection problems belong here; other messages stay on the room page.
+            const note = this.notice && this.notice.action === 'retry-links' ? '<p class="car-pip-note">' + esc(this.notice.text) + '</p>' : '';
             pip.root.innerHTML =
                 '<header class="car-pip-head"><span class="car-badge car-badge--live">' + esc(this.tr('live')) + '</span>' +
                     '<span class="car-pip-title">' + esc(s.room.title) + '</span>' +
-                    '<span class="car-pip-count">' + ICONS.users + esc(String(s.counts.people)) + '</span></header>' +
-                (this.notice && this.notice.kind !== 'info' ? '<p class="car-pip-note">' + esc(this.notice.text) + '</p>' : '') +
+                    '<span class="car-pip-count" title="' + esc(this.tr('people_count', { count: s.counts.people })) + '">' + ICONS.users + esc(String(s.counts.people)) + '</span></header>' +
+                note +
+                '<div class="car-pip-main"><span class="car-pip-section">' + ICONS.mic + esc(this.tr('speakers')) + '</span>' +
                 '<ul class="car-pip-people">' + (people || '<li class="car-pip-empty">' + esc(this.tr('empty_stage')) + '</li>') + '</ul>' +
+                listenerRow + '</div>' +
                 '<div class="car-controls car-pip-controls">' + controls.join('') + '</div>';
             pip.root.querySelectorAll('[data-person]').forEach((node) => node.classList.toggle('is-speaking', this.speaking.has(node.getAttribute('data-person'))));
         }
@@ -1297,6 +1321,21 @@
             this.presenceAt = Date.now();
             this.presenceRoom = s.room.id;
             this.channel.postMessage(Object.assign({ at: Date.now() }, info));
+        }
+
+        /** Runs after the page's own handlers: a link they already handled (menus, modals) is left alone. */
+        keepRoomOnLinkClick(e) {
+            if (!this.joined || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            const link = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+            if (!link || this.el.contains(link) || (link.target && link.target !== '_self') || link.hasAttribute('download')) return;
+            const raw = (link.getAttribute('href') || '').trim();
+            if (raw === '' || raw.startsWith('#') || /^(javascript|mailto|tel):/i.test(raw)) return;
+            let url;
+            try { url = new URL(link.href, window.location.href); } catch (err) { return; }
+            if (url.origin !== window.location.origin) return;
+            if (url.pathname === window.location.pathname && url.search === window.location.search) return;
+            e.preventDefault();
+            window.open(url.href, '_blank');
         }
 
         onChannelMessage(msg) {

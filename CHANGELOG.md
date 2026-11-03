@@ -6,7 +6,8 @@ All notable changes to this package are documented here. The format follows [Kee
 
 ### Added
 
-- **Pop out**: in Chrome and Edge on desktop, a button opens the room in a small always-on-top window (Document Picture-in-Picture) with who is speaking, the microphone or raise-hand button and Leave. Speaking rings and check-ins keep their pace while the window is open.
+- **Mini player**: in Chrome and Edge on desktop, a button opens the room in a small always-on-top window (Document Picture-in-Picture): speakers with Host / Co-host / Speaker labels and speaking rings, listeners in their own row, the microphone or raise-hand button, "Back to full room" and Leave (tap twice). Connection problems show there too. Speaking rings and check-ins keep their pace while it is open.
+- While someone is in a room, links to the site's other pages open in a new tab, so the room and its mini player keep playing (`links_in_new_tab`, default on). Links the page handles itself, other sites, downloads and Ctrl/Cmd-clicks are left alone.
 - **Media controls**: room title and host on the lock screen, phone notification and browser media controls; the browser's microphone and hang-up buttons work where offered (`togglemicrophone`, `hangup`). Cleared on leaving.
 - **Room bar** for other pages: `<x-creators-audio-rooms::room-bar />` (and `audio-rooms-bar.js` / `audio-rooms-bar.css`). While a room is open in another tab of the same browser it shows the room, a microphone button and "Back to room", which continues the room in that tab (`?continue=`, honoured only when a tab of this browser confirms it is in the room). Included in the package's own page layout.
 - When a newer tab of the same browser joins a room, the older one steps aside at once instead of on its next check-in.
