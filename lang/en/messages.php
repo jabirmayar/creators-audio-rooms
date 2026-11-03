@@ -30,6 +30,7 @@ return [
         'pop_out_hint' => 'Keep the room in a small window that stays on top while you use other tabs and apps',
         'pop_leave_again' => 'Tap again to leave the room',
         'pop_leave_confirm' => 'Leave?',
+        'pop_out_unavailable' => 'The mini player could not open in this browser. The room keeps playing here.',
         'bar_label' => 'Audio room',
         'bar_in_room' => 'You are in',
         'bar_back' => 'Back to room',

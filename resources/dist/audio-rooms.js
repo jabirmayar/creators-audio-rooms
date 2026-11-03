@@ -1164,9 +1164,14 @@
             this.announcePresence();
         }
 
-        /** Document Picture-in-Picture: a small always-on-top window (Chrome and Edge on desktop). */
+        /**
+         * Document Picture-in-Picture: a small always-on-top window (Chrome and Edge on desktop). Phones and
+         * tablets have no such window (desktop browsers emulating a phone report the API but cannot open it).
+         */
         pipSupported() {
-            return Boolean(this.joined && window.isSecureContext && 'documentPictureInPicture' in window);
+            const touch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+            const mobile = navigator.userAgentData ? navigator.userAgentData.mobile : /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+            return Boolean(this.joined && window.isSecureContext && 'documentPictureInPicture' in window && !touch && !mobile);
         }
 
         async openPip() {
@@ -1175,6 +1180,8 @@
             try {
                 win = await window.documentPictureInPicture.requestWindow({ width: 340, height: 440 });
             } catch (e) {
+                this.notice = { kind: 'warn', text: this.tr('pop_out_unavailable') };
+                this.render();
                 return;
             }
             // The room's styles, ready from the first frame (rules already loaded in this page), with the
