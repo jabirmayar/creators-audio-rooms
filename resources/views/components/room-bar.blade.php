@@ -24,5 +24,6 @@
     {{-- Only the small script loads with the page (after it, not blocking it); the stylesheet loads when a bar is shown. --}}
     <script src="{{ asset($base.'audio-rooms-bar.js') }}{{ $version('audio-rooms-bar.js') ? '?v='.$version('audio-rooms-bar.js') : '' }}" defer></script>
     <div data-audio-rooms-bar="{{ json_encode($labels, JSON_UNESCAPED_UNICODE) }}"
+         data-accent="{{ config('creators-audio-rooms.branding.accent') }}"
          data-css="{{ asset($base.'audio-rooms-bar.css') }}{{ $version('audio-rooms-bar.css') ? '?v='.$version('audio-rooms-bar.css') : '' }}" hidden></div>
 @endonce

@@ -9,6 +9,7 @@
 
     const MIC = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg>';
     const MIC_OFF = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M9 9v2a3 3 0 0 0 5.1 2.1M15 10.5V5.5a3 3 0 0 0-5.7-1.3"/><path d="M5.5 11a6.5 6.5 0 0 0 10.4 5.2M18.5 11c0 .8-.1 1.5-.4 2.2M12 17.5V21M8.5 21h7"/></svg>';
+    const HEADPHONES = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="5" height="7" rx="2"/><rect x="16" y="14" width="5" height="7" rx="2"/></svg>';
     // The room tab says it is still there every few seconds; after this long without a word the bar goes.
     const STALE_MS = 9000;
 
@@ -29,6 +30,9 @@
         bar.hidden = true;
         bar.setAttribute('role', 'region');
         bar.setAttribute('aria-label', t.label || 'Audio room');
+        // The app's accent colour (config 'branding'), like the room itself.
+        const accent = holder.getAttribute('data-accent');
+        if (accent) bar.style.setProperty('--car-bar-accent', accent);
         document.body.appendChild(bar);
 
         let info = null;
@@ -75,7 +79,7 @@
                     (info.muted ? MIC_OFF : MIC) + '<span>' + esc(info.muted ? t.mic_off : t.mic_on) + '</span></button>'
                 : '';
             bar.innerHTML =
-                '<span class="car-bar-dot" aria-hidden="true"></span>' +
+                '<span class="car-bar-icon" aria-hidden="true">' + HEADPHONES + '<span class="car-bar-dot"></span></span>' +
                 '<span class="car-bar-text"><span class="car-bar-label' + (message ? ' is-note' : '') + '">' + esc(message || t.in_room) + '</span>' +
                 '<span class="car-bar-title">' + esc(info.title) + '</span></span>' +
                 mic +
@@ -123,6 +127,36 @@
             channel.postMessage({ type: 'command', room: info.room, action: 'mic' });
         }
 
+        /** The room carries on in this tab (the room page joins by itself and the other tab steps aside). */
+        function continueHere() {
+            const url = new URL(info.url, window.location.href);
+            url.searchParams.set('continue', info.monitor ? 'monitor' : '1');
+            window.location.href = url.toString();
+        }
+
+        /**
+         * Browsers do not let a page bring just any tab to the front, but a tab opened from the room (links open
+         * in a new tab while in a room) may bring forward the room tab that opened it. Where the browser refuses,
+         * the room carries on in this tab instead.
+         */
+        function backToRoom() {
+            let roomTab = null;
+            try {
+                const opener = window.opener;
+                const path = (href) => new URL(href, window.location.href).pathname;
+                if (opener && !opener.closed && opener.location.origin === window.location.origin
+                    && path(opener.location.href) === path(info.url) && opener.document.querySelector('[data-audio-room]')) {
+                    roomTab = opener;
+                }
+            } catch (err) { roomTab = null; }
+            if (!roomTab) { continueHere(); return; }
+            try { roomTab.focus(); } catch (err) { /* not allowed */ }
+            setTimeout(() => {
+                // Still the tab in front: the browser kept the focus here.
+                if (!document.hidden && document.hasFocus()) continueHere();
+            }, 400);
+        }
+
         bar.addEventListener('click', (e) => {
             const button = e.target.closest('[data-bar]');
             if (!button || !info) return;
@@ -130,11 +164,7 @@
                 toggleMic();
                 return;
             }
-            // Browsers do not let a page bring another tab to the front, so the room carries on in this tab
-            // (the room page joins by itself and the other tab steps aside).
-            const url = new URL(info.url, window.location.href);
-            url.searchParams.set('continue', info.monitor ? 'monitor' : '1');
-            window.location.href = url.toString();
+            backToRoom();
         });
 
         // A room tab that is already open answers straight away.
