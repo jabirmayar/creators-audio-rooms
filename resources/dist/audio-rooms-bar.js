@@ -37,6 +37,10 @@
 
         let info = null;
         let staleTimer = null;
+        // Who was last heard and when: "… is speaking" stays through the short pauses between words.
+        const SPEAKING_HOLD_MS = 1500;
+        let heard = { names: [], self: false, at: 0 };
+        let heardTimer = null;
         let message = null;      // short note in place of "You are in", e.g. microphone blocked
         let messageTimer = null;
 
@@ -78,8 +82,16 @@
                 ? '<button type="button" class="car-bar-btn' + (info.muted ? ' is-off' : ' is-live') + '" data-bar="mic" aria-pressed="' + !info.muted + '"' + (info.moderator_muted ? ' disabled' : '') + '>' +
                     (info.muted ? MIC_OFF : MIC) + '<span>' + esc(info.muted ? t.mic_off : t.mic_on) + '</span></button>'
                 : '';
-            const speaking = (info.speaking || []).filter(Boolean);
-            if (info.speaking_self && !speaking.length) speaking.push('');
+            const now = Date.now();
+            const live = (info.speaking || []).filter(Boolean);
+            if (live.length || info.speaking_self) heard = { names: live, self: Boolean(info.speaking_self), at: now };
+            const recent = !live.length && !info.speaking_self && heard.at && now - heard.at < SPEAKING_HOLD_MS;
+            const speaking = recent ? heard.names.slice() : live;
+            // Muting yourself ends "You are speaking" at once.
+            const self = !info.muted && (recent ? heard.self : info.speaking_self);
+            if (self && !speaking.length) speaking.push('');
+            clearTimeout(heardTimer);
+            if (recent) heardTimer = setTimeout(render, SPEAKING_HOLD_MS - (now - heard.at) + 20);
             const label = message || (!speaking.length ? t.in_room
                 : speaking[0] === '' ? t.speaking_you
                 : (speaking.length === 1 ? t.speaking_one : t.speaking_many).replace(':names', speaking.join(', ')));

@@ -1576,12 +1576,15 @@
                     this.sentLevel().then((level) => { if (level > 0.02 && this.state && this.state.me && !this.state.me.self_muted) this.heardAt.set(me.key, Date.now()); });
                 }
 
+                // Background tabs only get their timers about once a second: hold longer there, or speech
+                // would look like it stops between every word (mini player and bar).
+                const hold = document.hidden ? 1600 : HOLD_MS;
                 const next = new Set();
                 this.heardAt.forEach((at, key) => {
                     const peer = this.peers.get(key);
                     const audible = me && key === me.key ? !me.self_muted : Boolean(peer && peer.audio && !peer.audio.muted);
-                    if (audible && now - at < HOLD_MS) next.add(key);
-                    else if (now - at >= HOLD_MS) this.heardAt.delete(key);
+                    if (audible && now - at < hold) next.add(key);
+                    else if (now - at >= hold) this.heardAt.delete(key);
                 });
 
                 const changed = next.size !== this.speaking.size || Array.from(next).some((k) => !this.speaking.has(k));
