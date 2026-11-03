@@ -99,7 +99,14 @@ class NetworkingTest extends ApiTestCase
         $roomId = $this->createLiveRoom($this->staff());
         $this->join($this->member(), $roomId)->assertJsonPath('ice_transport_policy', 'all');
 
+        // Relay-only without any relay would leave nobody able to connect: stay on "all".
         config(['creators-audio-rooms.ice_transport_policy' => 'relay']);
+        $this->join($this->member(), $roomId)->assertJsonPath('ice_transport_policy', 'all');
+
+        config([
+            'creators-audio-rooms.turn.urls' => ['turn:turn.example.test:3478'],
+            'creators-audio-rooms.turn.secret' => 'shared-secret',
+        ]);
         $this->join($this->member(), $roomId)->assertJsonPath('ice_transport_policy', 'relay');
     }
 

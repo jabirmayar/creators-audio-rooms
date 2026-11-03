@@ -2,6 +2,12 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.8.4 - 2026-11-03
+
+### Fixed
+
+- With `ice_transport_policy` set to `relay`, a join that got no relay server (for example while Cloudflare is unreachable) left people unable to connect to anyone. Relay-only now applies only when a relay server is handed out; otherwise the room connects directly as with `all`.
+
 ## 1.8.3 - 2026-11-02
 
 ### Fixed

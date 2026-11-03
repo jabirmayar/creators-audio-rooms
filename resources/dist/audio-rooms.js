@@ -737,7 +737,8 @@
 
         newPeer(key, signature) {
             const config = { iceServers: this.iceServers, bundlePolicy: 'max-bundle' };
-            if (this.iceTransportPolicy === 'relay') config.iceTransportPolicy = 'relay';
+            // Relay-only only when a relay was handed out; otherwise links could never form.
+            if (this.iceTransportPolicy === 'relay' && this.hasRelay()) config.iceTransportPolicy = 'relay';
             const pc = new RTCPeerConnection(config);
             const attempt = (this.linkAttempts.get(key) || 0) + 1;
             this.linkAttempts.set(key, attempt);
