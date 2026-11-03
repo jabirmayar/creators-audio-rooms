@@ -444,7 +444,9 @@
         }
 
         nextInterval() {
-            if (document.hidden && !this.pip) return this.intervals.hidden;
+            // A hidden tab checks in slowly, unless the mini player or a bar on another tab is showing the room
+            // (so they see changes, and the room ending, within a couple of seconds).
+            if (document.hidden && !this.pip && !this.watchedRecently()) return this.intervals.hidden;
             const recent = Date.now() - this.lastActivity < 10000;
             const negotiating = Array.from(this.peers.values()).some((p) => linkState(p.pc) !== 'connected');
             return recent || negotiating ? this.intervals.active : this.intervals.idle;
@@ -1367,6 +1369,11 @@
             window.open(url.href, '_blank');
         }
 
+        /** A bar on another tab of this browser showed this room in the last few seconds. */
+        watchedRecently() {
+            return Boolean(this.watchedAt && Date.now() - this.watchedAt < 9000);
+        }
+
         /** Names of the others speaking now (for the bar on other tabs; the person themselves is speaking_self). */
         speakingNames() {
             const me = this.state && this.state.me;
@@ -1521,6 +1528,25 @@
             }
         }
 
+        /** Level of the microphone being sent (0–1), from the first connection's statistics; 0 if unknown. */
+        async sentLevel() {
+            if (this.sentLevelPending) return 0;
+            const peer = Array.from(this.peers.values()).find((p) => p.pc.getSenders().some((sender) => sender.track));
+            if (!peer) return 0;
+            this.sentLevelPending = true;
+            try {
+                let level = 0;
+                (await peer.pc.getStats()).forEach((r) => {
+                    if (r.type === 'media-source' && r.kind === 'audio' && typeof r.audioLevel === 'number') level = Math.max(level, r.audioLevel);
+                });
+                return level;
+            } catch (e) {
+                return 0;
+            } finally {
+                this.sentLevelPending = false;
+            }
+        }
+
         startLevelMeter() {
             clearInterval(this.levelTimer);
             this.heardAt = new Map(); // key -> last time sound was detected
@@ -1533,7 +1559,7 @@
             };
             this.levelTimer = setInterval(() => {
                 // Hidden tab: only keep measuring while the mini player or a bar on another tab shows it.
-                if (document.hidden && !this.pip && !(this.watchedAt && Date.now() - this.watchedAt < 9000)) return;
+                if (document.hidden && !this.pip && !this.watchedRecently()) return;
                 const me = this.state && this.state.me;
                 const now = Date.now();
                 this.peers.forEach((peer, key) => {
@@ -1542,7 +1568,13 @@
                     // Result lands before the next tick.
                     this.energyLevel(peer).then((level) => { if (level > 0.02) this.heardAt.set(key, Date.now()); });
                 });
-                if (me && this.analyser && !me.self_muted && rms(this.analyser) > 0.04) this.heardAt.set(me.key, now);
+                if (me && !me.self_muted) {
+                    // Own voice: from the page's audio meter, which browsers keep paused until someone clicks on this
+                    // page (it may never happen: "Go live" joins by itself, the bar can switch the microphone on), so
+                    // also from what the connections report about the microphone being sent.
+                    if (this.analyser && this.audioContext && this.audioContext.state === 'running' && rms(this.analyser) > 0.04) this.heardAt.set(me.key, now);
+                    this.sentLevel().then((level) => { if (level > 0.02 && this.state && this.state.me && !this.state.me.self_muted) this.heardAt.set(me.key, Date.now()); });
+                }
 
                 const next = new Set();
                 this.heardAt.forEach((at, key) => {
