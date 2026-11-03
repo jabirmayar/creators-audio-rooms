@@ -622,7 +622,8 @@ class RoomManager
         if ($target->role !== RoomRole::Listener) {
             return;
         }
-        if ($room->activeCount(RoomRole::Host, RoomRole::CoHost, RoomRole::Speaker) >= $room->max_speakers) {
+        // max_speakers counts speakers only: the host and co-hosts are on stage on top of it.
+        if ($room->activeCount(RoomRole::Speaker) >= $room->max_speakers) {
             throw RoomActionDenied::because('speakers_full', 409);
         }
         $target->forceFill(['invited_to_speak_at' => now(), 'invited_by_key' => $byKey, 'invited_role' => null, 'hand_raised_at' => null])->save();
@@ -633,10 +634,10 @@ class RoomManager
         if ($target->role === $to) {
             return;
         }
-        if ($to->canSpeak() && ! $target->role->canSpeak()) {
-            if ($room->activeCount(RoomRole::Host, RoomRole::CoHost, RoomRole::Speaker) >= $room->max_speakers) {
-                throw RoomActionDenied::because('speakers_full', 409);
-            }
+        // A new speaker (a listener moving up, or a co-host stepping down) needs a free speaker place.
+        if ($to === RoomRole::Speaker && $target->role !== RoomRole::Speaker
+            && $room->activeCount(RoomRole::Speaker) >= $room->max_speakers) {
+            throw RoomActionDenied::because('speakers_full', 409);
         }
         if ($to === RoomRole::Listener && $target->role === RoomRole::Host) {
             throw RoomActionDenied::because('not_allowed');
@@ -681,12 +682,9 @@ class RoomManager
         if (! $identity || ! $this->access->canHost($identity, $room)) {
             throw RoomActionDenied::because('cannot_host', 409);
         }
+        // Co-hosts count against max_hosts only, not the speaker places.
         if ($room->activeCount(RoomRole::Host, RoomRole::CoHost) >= $room->max_hosts) {
             throw RoomActionDenied::because('hosts_full', 409);
-        }
-        if (! $target->role->canSpeak()
-            && $room->activeCount(RoomRole::Host, RoomRole::CoHost, RoomRole::Speaker) >= $room->max_speakers) {
-            throw RoomActionDenied::because('speakers_full', 409);
         }
     }
 

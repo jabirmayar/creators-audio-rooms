@@ -2,6 +2,16 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.10.0 - 2026-11-03
+
+### Changed
+
+- `max_speakers` counts speakers only. The host and co-hosts are on stage on top of it (they count against `max_hosts`), so with the defaults a room has up to 6 speakers besides its hosts. Making someone co-host no longer needs a free speaker place. The room state has a new `counts.speakers`; `counts.voices` (everyone on stage) is unchanged. `creators-audio-rooms:doctor` no longer asks for `max_speakers >= max_hosts`.
+
+### Fixed
+
+- A server that is briefly unavailable (503 while restarting or overloaded, other 5xx, 429 or a network error) no longer breaks audio links. Connection setup messages to each person are sent in order and retried a few times (about 6 seconds in all) instead of being dropped, which left a half-made link until the watchdog rebuilt it. A check-in that gets a 5xx now waits and retries like a network blip ("Reconnecting") instead of being treated as an error.
+
 ## 1.9.0 - 2026-11-03
 
 ### Added

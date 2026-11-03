@@ -188,6 +188,8 @@ class RoomStatePresenter
             'counts' => [
                 'hosts' => count($byRole(RoomRole::Host, RoomRole::CoHost)),
                 'voices' => count($byRole(RoomRole::Host, RoomRole::CoHost, RoomRole::Speaker)),
+                // Speakers only: what limits.speakers caps.
+                'speakers' => count($byRole(RoomRole::Speaker)),
                 'listeners' => count($byRole(RoomRole::Listener)),
                 'requests' => count($requests),
                 'monitors' => count($byRole(RoomRole::Monitor)),

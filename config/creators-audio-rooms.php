@@ -67,6 +67,7 @@ return [
 
     'limits' => [
         'max_hosts' => 2,
+        // Speakers besides the host and co-hosts (who count against max_hosts only).
         'max_speakers' => 6,
         'max_listeners' => 30,
         'max_open_rooms_per_host' => 1,

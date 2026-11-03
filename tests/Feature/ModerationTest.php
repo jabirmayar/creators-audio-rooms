@@ -41,9 +41,9 @@ class ModerationTest extends ApiTestCase
         $this->moderate($a, $roomId, 'remove', $host)->assertStatus(403);
     }
 
-    public function test_the_speaker_cap_includes_hosts_and_cannot_be_exceeded(): void
+    public function test_the_speaker_cap_counts_speakers_only_and_cannot_be_exceeded(): void
     {
-        config(['creators-audio-rooms.limits.max_speakers' => 3]);
+        config(['creators-audio-rooms.limits.max_speakers' => 2]);
         $host = $this->staff();
         $roomId = $this->createLiveRoom($host);
         $members = [$this->member(), $this->member(), $this->member()];
@@ -53,7 +53,7 @@ class ModerationTest extends ApiTestCase
 
         $this->makeSpeaker($host, $roomId, $members[0])->assertOk();
         $this->makeSpeaker($host, $roomId, $members[1])->assertOk();
-        // host + 2 speakers = 3 voices: full, for approvals and invitations alike.
+        // 2 speakers (the host is not counted): full, for approvals and invitations alike.
         $this->makeSpeaker($host, $roomId, $members[2])->assertStatus(409)->assertJson(['error' => 'speakers_full']);
         $this->api($members[2], 'POST', "/rooms/{$roomId}/hand", ['raised' => false])->assertOk();
         $this->moderate($host, $roomId, 'invite_speaker', $members[2])->assertStatus(409)->assertJson(['error' => 'speakers_full']);
@@ -61,6 +61,21 @@ class ModerationTest extends ApiTestCase
 
         $this->moderate($host, $roomId, 'demote', $members[0])->assertOk();
         $this->moderate($host, $roomId, 'approve_speaker', $members[2])->assertOk();
+    }
+
+    public function test_a_co_host_does_not_take_a_speaker_place(): void
+    {
+        config(['creators-audio-rooms.limits.max_speakers' => 1]);
+        $host = $this->staff();
+        $co = $this->staff('co@org-a.test');
+        $roomId = $this->createLiveRoom($host);
+        $speaker = $this->member();
+        $this->join($co, $roomId);
+        $this->join($speaker, $roomId);
+
+        $this->makeCoHost($host, $roomId, $co)->assertOk();
+        $this->makeSpeaker($host, $roomId, $speaker)->assertOk();
+        $this->sync($host, $roomId)->assertJsonPath('state.counts.speakers', 1)->assertJsonPath('state.counts.voices', 3);
     }
 
     public function test_a_moderator_mute_cannot_be_undone_remotely(): void

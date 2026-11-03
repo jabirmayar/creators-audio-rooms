@@ -180,6 +180,7 @@
             this.failures = 0;
 
             this.peers = new Map();   // key -> { pc, signature, audio, stream, analyser, pending: [], failed, polite }
+            this.outbox = new Map();  // key -> last signal sent to that person (keeps them in order)
             this.localStream = null;
             this.micStarting = false;
             this.audioContext = null;
@@ -507,7 +508,8 @@
         }
 
         async onSyncError(e) {
-            if (!(e instanceof ApiError)) {
+            // A server that is briefly busy or restarting (5xx) is treated like a network blip.
+            if (!(e instanceof ApiError) || e.status >= 500) {
                 // Network failure: keep the audio running and retry with backoff.
                 this.failures++;
                 this.setStatus(navigator.onLine ? 'reconnecting' : 'offline');
@@ -1469,12 +1471,32 @@
             Array.from(this.peers.keys()).forEach((key) => this.closePeer(key, false));
         }
 
-        async signal(to, type, payload) {
-            try {
-                await this.api.request('POST', '/signal', { to, type, payload: JSON.stringify(payload) });
-            } catch (e) {
-                if (e instanceof ApiError && ['replaced', 'removed', 'room_ended', 'session_expired'].includes(e.code)) {
-                    this.onSyncError(e);
+        // Connection setup messages to one person go out in order. If the server is briefly busy or
+        // unreachable (5xx, 429, network), a message is retried a few times instead of being lost, which
+        // used to leave a half-made audio link until the watchdog rebuilt it.
+        signal(to, type, payload) {
+            const body = { to, type, payload: JSON.stringify(payload) };
+            const previous = this.outbox.get(to) || Promise.resolve();
+            const next = previous.then(() => this.sendSignal(body));
+            this.outbox.set(to, next);
+            next.then(() => { if (this.outbox.get(to) === next) this.outbox.delete(to); });
+            return next;
+        }
+
+        async sendSignal(body) {
+            const waits = [300, 800, 1600, 3000];
+            for (let attempt = 0; ; attempt++) {
+                try {
+                    await this.api.request('POST', '/signal', body);
+                    return;
+                } catch (e) {
+                    if (e instanceof ApiError && ['replaced', 'removed', 'room_ended', 'session_expired'].includes(e.code)) {
+                        this.onSyncError(e);
+                        return;
+                    }
+                    const passing = !(e instanceof ApiError) || e.status >= 500 || e.status === 429;
+                    if (!passing || attempt >= waits.length || !this.joined) return;
+                    await sleep(waits[attempt]);
                 }
             }
         }
@@ -2112,7 +2134,7 @@
             if (m.invited) items.push(btn('cancel_invite'));
             if (m.role === 'listener') {
                 // A raised hand is consent, so approving promotes; otherwise the listener gets an invitation to accept.
-                if (!m.invited && s.counts.voices < s.room.limits.speakers) items.push(btn(m.hand_raised ? 'approve_speaker' : 'invite_speaker'));
+                if (!m.invited && (s.counts.speakers ?? s.counts.voices) < s.room.limits.speakers) items.push(btn(m.hand_raised ? 'approve_speaker' : 'invite_speaker'));
                 if (m.hand_raised) items.push(btn('decline_request'));
             }
             const actingAsMonitor = s.me && s.me.role === 'monitor';

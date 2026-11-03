@@ -142,8 +142,8 @@ class DoctorCommand extends Command
         $speakers = (int) ($limits['max_speakers'] ?? 0);
         $listeners = (int) ($limits['max_listeners'] ?? 0);
 
-        if ($hosts < 1 || $speakers < $hosts || $listeners < 1) {
-            $this->reportFail('Room limits', 'need max_hosts >= 1, max_speakers >= max_hosts, max_listeners >= 1');
+        if ($hosts < 1 || $speakers < 0 || $listeners < 1) {
+            $this->reportFail('Room limits', 'need max_hosts >= 1, max_speakers >= 0, max_listeners >= 1');
 
             return;
         }
