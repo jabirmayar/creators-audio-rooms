@@ -2,6 +2,12 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.11.0 - 2026-11-04
+
+### Changed
+
+- Links come up sooner. While a link is being set up, and while a newcomer waits for the speakers' offers, the page checks in every 300 ms (`signaling.sync_interval_linking_ms`) instead of every 1.2-2.5 s, so the offer, answer and candidates no longer each wait a full interval. Speakers keep the active pace even when idle, since they are the ones who offer links to people who join. A signal's reply (`POST /signal` with `since`) carries the messages already waiting for the sender, which saves a check-in on every answer. The default `rate_limits.sync` is 300 a minute (was 120) to leave room for the quick pace; the room state has no new fields.
+
 ## 1.10.0 - 2026-11-03
 
 ### Changed

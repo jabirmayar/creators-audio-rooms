@@ -110,6 +110,8 @@ return [
         'sync_interval_ms' => 1200,
         'sync_interval_idle_ms' => 2500,
         'sync_interval_hidden_ms' => 5000,
+        // While a link to someone is being set up (a few seconds at most), so its messages do not each wait a full interval.
+        'sync_interval_linking_ms' => 300,
         'message_ttl_seconds' => 60,
         'max_messages_per_sync' => 50,
         // Signed session tokens for the sync/signal endpoints.
@@ -227,7 +229,7 @@ return [
     */
 
     'rate_limits' => [
-        'sync' => 120,
+        'sync' => 300,
         'signal' => 240,
         'actions' => 60,
         'create' => 10,

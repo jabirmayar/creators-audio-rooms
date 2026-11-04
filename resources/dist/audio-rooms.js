@@ -173,7 +173,7 @@
             this.cursor = 0;
             this.version = -1;
             this.iceServers = [];
-            this.intervals = { active: 1200, idle: 2500, hidden: 5000 };
+            this.intervals = { active: 1200, idle: 2500, hidden: 5000, linking: 300 };
             this.lastActivity = 0;
             this.syncTimer = null;
             this.syncing = false;
@@ -451,8 +451,17 @@
             // Shown only in a bar on another tab: the relaxed pace is enough (the room ending shows within seconds).
             if (document.hidden && !this.pip) return this.intervals.idle;
             const recent = Date.now() - this.lastActivity < 10000;
-            const negotiating = Array.from(this.peers.values()).some((p) => linkState(p.pc) !== 'connected');
-            return recent || negotiating ? this.intervals.active : this.intervals.idle;
+            const peers = Array.from(this.peers.values());
+            // Setting up a link exchanges several messages through the server. Check in quickly while a link is
+            // coming up, and while someone is expected to offer one (a new listener waits for each speaker's
+            // offer), so each message waits a fraction of a second instead of a full interval.
+            const linking = peers.some((p) => !p.failed && linkState(p.pc) !== 'connected' && Date.now() - p.createdAt < 20000);
+            const awaiting = recent && Array.from(this.wantedLinks().entries()).some(([key, want]) => !want.iStart && !this.peers.has(key) && !this.unreachable.has(key));
+            if ((linking || awaiting) && !document.hidden) return this.intervals.linking;
+            const negotiating = peers.some((p) => linkState(p.pc) !== 'connected');
+            // Speakers keep the active pace: they are the ones who offer links to people who join.
+            const iSpeak = Boolean(this.state && this.state.me && ROLE_SPEAKS[this.state.me.role]);
+            return recent || negotiating || iSpeak ? this.intervals.active : this.intervals.idle;
         }
 
         touchActivity() {
@@ -471,7 +480,6 @@
                 const data = await this.api.request('GET', '/sync?since=' + this.cursor + '&v=' + this.version + (document.hidden ? '&hidden=1' : ''));
                 this.failures = 0;
                 if (this.status !== 'connected') this.setStatus('connected');
-                this.cursor = data.cursor;
                 if (data.renew_session) this.renewSession();
                 if (data.state) {
                     this.touchActivity();
@@ -479,10 +487,7 @@
                     this.render();
                     this.reconcilePeers();
                 }
-                for (const message of data.messages || []) {
-                    this.touchActivity();
-                    await this.onSignal(message);
-                }
+                await this.consume(data);
                 // Links closed by the other side (or lost offers) are rebuilt here.
                 if (++this.syncCount % 5 === 0) this.reconcilePeers();
             } catch (e) {
@@ -490,6 +495,20 @@
             } finally {
                 this.syncing = false;
                 this.scheduleSync();
+            }
+        }
+
+        /**
+         * Messages from a check-in or from a signal reply. Each is handled once: the cursor moves before any
+         * message is handled, so a reply and a check-in arriving together cannot repeat an offer.
+         */
+        async consume(data) {
+            if (!data || typeof data.cursor !== 'number') return;
+            const fresh = (data.messages || []).filter((m) => !(m.seq > 0) || m.seq > this.cursor);
+            this.cursor = Math.max(this.cursor, data.cursor);
+            for (const message of fresh) {
+                this.touchActivity();
+                await this.onSignal(message);
             }
         }
 
@@ -807,18 +826,24 @@
          * Connect to everyone where at least one side speaks. The speaker starts;
          * between two speakers the smaller key starts. Role changes rebuild the link.
          */
-        reconcilePeers() {
-            if (!this.joined || !this.state || !this.state.me) return;
+        /** The links this person should have: key -> { member, signature, iStart } (iStart: this side sends the offer). */
+        wantedLinks() {
+            const wanted = new Map();
+            if (!this.joined || !this.state || !this.state.me) return wanted;
             const me = this.state.me;
             const iSpeak = ROLE_SPEAKS[me.role];
-            const wanted = new Map();
-
             this.members().forEach((m) => {
                 if (m.key === me.key) return;
                 const theySpeak = ROLE_SPEAKS[m.role];
                 if (!iSpeak && !theySpeak) return;
                 wanted.set(m.key, { member: m, signature: (iSpeak ? 'S' : 'L') + (theySpeak ? 'S' : 'L'), iStart: iSpeak && (!theySpeak || me.key < m.key) });
             });
+            return wanted;
+        }
+
+        reconcilePeers() {
+            if (!this.joined || !this.state || !this.state.me) return;
+            const wanted = this.wantedLinks();
 
             this.peers.forEach((peer, key) => {
                 const want = wanted.get(key);
@@ -841,7 +866,7 @@
             // first try: if the relay cannot be reached, later tries may also connect directly.
             if (this.iceTransportPolicy === 'relay' && this.hasRelay() && attempt === 1) config.iceTransportPolicy = 'relay';
             const pc = new RTCPeerConnection(config);
-            const peer = { pc, signature, audio: null, stream: null, pending: [], outbox: [], outboxTimer: null, restarts: 0, remoteSet: false, attempt, candidateTypes: new Set(), watchdog: null, initiator: false };
+            const peer = { pc, signature, audio: null, stream: null, pending: [], outbox: [], outboxTimer: null, restarts: 0, remoteSet: false, attempt, candidateTypes: new Set(), watchdog: null, initiator: false, createdAt: Date.now() };
             this.peers.set(key, peer);
             this.armWatchdog(key, 15000);
 
@@ -1487,7 +1512,8 @@
             const waits = [300, 800, 1600, 3000];
             for (let attempt = 0; ; attempt++) {
                 try {
-                    await this.api.request('POST', '/signal', body);
+                    const reply = await this.api.request('POST', '/signal', Object.assign({ since: this.cursor }, body));
+                    if (this.joined) await this.consume(reply);
                     return;
                 } catch (e) {
                     if (e instanceof ApiError && ['replaced', 'removed', 'room_ended', 'session_expired'].includes(e.code)) {

@@ -129,6 +129,7 @@ class RoomApiController extends Controller
                 'active' => (int) config('creators-audio-rooms.signaling.sync_interval_ms'),
                 'idle' => (int) config('creators-audio-rooms.signaling.sync_interval_idle_ms'),
                 'hidden' => (int) config('creators-audio-rooms.signaling.sync_interval_hidden_ms'),
+                'linking' => (int) config('creators-audio-rooms.signaling.sync_interval_linking_ms', 300),
             ],
             'state' => $this->presenter->forViewer($room->fresh(), $who),
         ]);
@@ -210,6 +211,8 @@ class RoomApiController extends Controller
             'type' => ['required', 'string', 'in:'.implode(',', SignalRelay::TYPES)],
             // JSON-encoded by the browser and relayed untouched.
             'payload' => ['nullable', 'string'],
+            // The sender's cursor: the reply then carries the messages waiting for them (one check-in saved).
+            'since' => ['nullable', 'integer', 'min:0'],
         ]);
 
         $who = $this->who($request);
@@ -218,7 +221,12 @@ class RoomApiController extends Controller
 
         $this->relay->relay($room, $member, $data['to'], $data['type'], $data['payload'] ?? null);
 
-        return response()->json(['ok' => true]);
+        $response = ['ok' => true];
+        if (isset($data['since'])) {
+            $response += $this->signals->pull($room->id, $who->key, (int) $data['since']);
+        }
+
+        return response()->json($response);
     }
 
     public function hand(Request $request, string $room): JsonResponse

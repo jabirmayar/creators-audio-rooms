@@ -82,6 +82,24 @@ class SignalingTest extends ApiTestCase
         $this->assertSame([], $this->sync($listener, $roomId, $cursor)->json('messages'));
     }
 
+    public function test_a_signal_reply_carries_the_messages_waiting_for_the_sender(): void
+    {
+        $host = $this->staff();
+        $listener = $this->member();
+        $roomId = $this->createLiveRoom($host);
+        $this->join($listener, $roomId);
+
+        $this->api($host, 'POST', "/rooms/{$roomId}/signal", ['to' => $this->keyOf($listener), 'type' => 'offer', 'payload' => json_encode(['type' => 'offer', 'sdp' => "v=0\r\na=sendonly\r\n"])])
+            ->assertOk()->assertJsonMissing(['cursor' => 0])->assertJsonMissingPath('messages');
+
+        // The listener answers before checking in: the reply brings the offer along, with the cursor.
+        $reply = $this->api($listener, 'POST', "/rooms/{$roomId}/signal", ['to' => $this->keyOf($host), 'type' => 'answer', 'payload' => json_encode(['type' => 'answer', 'sdp' => "v=0\r\na=recvonly\r\n"]), 'since' => 0])
+            ->assertOk()->assertJsonPath('cursor', 1)->assertJsonCount(1, 'messages')->assertJsonPath('messages.0.type', 'offer');
+
+        // Nothing is delivered twice: the next check-in from that cursor is empty.
+        $this->sync($listener, $roomId, (int) $reply->json('cursor'))->assertOk()->assertJsonCount(0, 'messages');
+    }
+
     public function test_listeners_cannot_send_audio_or_start_connections(): void
     {
         $host = $this->staff();
