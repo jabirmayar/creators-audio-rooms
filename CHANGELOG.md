@@ -2,6 +2,17 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.12.0 - 2026-11-04
+
+### Changed
+
+- A slow or briefly failing server no longer makes a room rebuild its audio links. A page whose room session lapsed, or which the server had meanwhile treated as gone, rejoins with its old token and keeps its connection id (`POST /join` reads the `X-Audio-Room-Session` header, expired or not, when it is signed for that person and room); the others see nothing change. A connection another tab has since taken over is never handed back. The rejoining page keeps its links and its place in the message stream.
+- `lifecycle.presence_timeout_seconds` defaults to 60 (was 25): a member counts as gone only after a minute without a successful check-in. Hidden pages keep their 150 s.
+- The 300 ms linking pace is used only while check-ins succeed and answer within a second; against a slow server the page falls back to the normal pace instead of piling up requests.
+- A check-in that hangs is given up after 15 s and counted as a failure, so one stuck request no longer blocks the heartbeat.
+- `GuardParticipantResolver::find()` returns the account already signed in on the guard when it is the same person, which saves a users query on every check-in and signal for apps whose signaling routes carry the app session.
+- Each quiet rejoin is logged to the console with the server's answer and the state of recent check-ins; the diagnostics panel shows the rejoin count and the last check-in time.
+
 ## 1.11.0 - 2026-11-04
 
 ### Changed

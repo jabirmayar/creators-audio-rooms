@@ -220,13 +220,14 @@ class RoomManager
      *
      * @return array{member: Member, token: SessionToken, rejoined: bool}
      */
-    public function join(ParticipantIdentity $who, Room $room, bool $asMonitor = false): array
+    /** $resumeConnection: the connection id from the page's previous (possibly lapsed) room session, if any. */
+    public function join(ParticipantIdentity $who, Room $room, bool $asMonitor = false, ?string $resumeConnection = null): array
     {
         $check = fn (Room $room) => $asMonitor ? $this->access->ensureCanMonitor($who, $room) : $this->access->ensureCanJoin($who, $room);
         $check($room);
         $rejoined = false;
 
-        $member = $this->locked($room, function (Room $room) use ($who, $asMonitor, $check, &$rejoined) {
+        $member = $this->locked($room, function (Room $room) use ($who, $asMonitor, $check, $resumeConnection, &$rejoined) {
             // Re-check inside the lock: the room may have ended, or a ban landed, meanwhile.
             $check($room);
 
@@ -260,7 +261,11 @@ class RoomManager
                 'avatar_url' => $who->avatarUrl,
                 'profile_url' => $who->profileUrl,
                 'state' => MemberState::Joined,
-                'connection_id' => Str::random(24),
+                // The same connection when the page proves it held this member's last one (its session lapsed, or
+                // a slow spell marked it as gone): the others see nothing change and keep their audio links. A
+                // connection another tab has since replaced is never taken back.
+                'connection_id' => $resumeConnection !== null && $member->exists && $member->state !== MemberState::Removed
+                    && in_array($member->connection_id, [null, $resumeConnection], true) ? $resumeConnection : Str::random(24),
                 // Microphones always start off; the participant turns theirs on.
                 'self_muted' => true,
                 'joined_at' => $member->joined_at ?? now(),

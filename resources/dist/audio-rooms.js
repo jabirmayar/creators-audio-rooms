@@ -200,6 +200,9 @@
             this.linkAttempts = new Map();  // key -> fresh connections tried since the last success
             this.unreachable = new Set();   // keys given up on until Retry
             this.syncCount = 0;
+            this.connection = null;    // this page's connection id, from its last join
+            this.lastSyncMs = 0;       // how long the last check-in took
+            this.rejoins = [];         // { code, at } of each quiet rejoin, for the diagnostics panel
             // Connection details (?debug=1, or the button in a "could not connect" message); off when the app disables diagnostics.
             this.diagnostics = config.diagnostics !== false;
             this.showDiag = this.diagnostics && /[?&]debug=1(&|$)/.test(window.location.search);
@@ -386,8 +389,12 @@
         onJoined(data) {
             // Another tab of this browser in the same room steps aside now (the server would tell it on its next check).
             if (this.channel) this.channel.postMessage({ type: 'taken-over', room: this.config.room });
+            // A rejoin that kept this connection (the server reuses it for a page that sends its old token) keeps
+            // its audio links and its place in the message stream; only a new connection starts over.
+            const resumed = this.joined && Boolean(this.connection) && data.connection === this.connection;
+            this.connection = data.connection || null;
             this.api.session = data.session;
-            this.cursor = data.cursor || 0;
+            if (!resumed) this.cursor = data.cursor || 0;
             this.iceServers = data.ice_servers || [];
             this.pendingMute = null;
             this.muteRetries = 0;
@@ -400,7 +407,7 @@
             this.status = 'connected';
             this.failures = 0;
             this.rememberInRoom();
-            this.closeAllPeers();
+            if (!resumed) this.closeAllPeers();
             this.setState(data.state);
             this.touchActivity();
             this.render();
@@ -457,7 +464,10 @@
             // offer), so each message waits a fraction of a second instead of a full interval.
             const linking = peers.some((p) => !p.failed && linkState(p.pc) !== 'connected' && Date.now() - p.createdAt < 20000);
             const awaiting = recent && Array.from(this.wantedLinks().entries()).some(([key, want]) => !want.iStart && !this.peers.has(key) && !this.unreachable.has(key));
-            if ((linking || awaiting) && !document.hidden) return this.intervals.linking;
+            // Only while the server answers promptly: against a slow or failing one the quick pace would pile up
+            // requests and make it slower still.
+            const prompt = this.failures === 0 && this.lastSyncMs < 1000;
+            if ((linking || awaiting) && prompt && !document.hidden) return this.intervals.linking;
             const negotiating = peers.some((p) => linkState(p.pc) !== 'connected');
             // Speakers keep the active pace: they are the ones who offer links to people who join.
             const iSpeak = Boolean(this.state && this.state.me && ROLE_SPEAKS[this.state.me.role]);
@@ -476,8 +486,14 @@
                 return;
             }
             this.syncing = true;
+            // A check-in that hangs must not hold up the next ones: it is given up after a while and counted as a
+            // failure, so even a struggling server hears from this page every few seconds (presence depends on it).
+            const abort = new AbortController();
+            const guard = setTimeout(() => abort.abort(), 15000);
+            const started = Date.now();
             try {
-                const data = await this.api.request('GET', '/sync?since=' + this.cursor + '&v=' + this.version + (document.hidden ? '&hidden=1' : ''));
+                const data = await this.api.request('GET', '/sync?since=' + this.cursor + '&v=' + this.version + (document.hidden ? '&hidden=1' : ''), undefined, { signal: abort.signal });
+                this.lastSyncMs = Date.now() - started;
                 this.failures = 0;
                 if (this.status !== 'connected') this.setStatus('connected');
                 if (data.renew_session) this.renewSession();
@@ -493,6 +509,7 @@
             } catch (e) {
                 await this.onSyncError(e);
             } finally {
+                clearTimeout(guard);
                 this.syncing = false;
                 this.scheduleSync();
             }
@@ -536,7 +553,8 @@
                 return;
             }
             if (e.code === 'session_expired' || e.code === 'not_a_member') {
-                // Rejoin quietly: same member row, same role, new connection.
+                // Rejoin quietly: same member row, same role, and the same connection when the server lets us keep it.
+                this.noteRejoin(e.code, 'check-in');
                 try { this.onJoined(await this.api.request('POST', '/join', this.joinBody())); } catch (err) { this.handleError(err); }
                 return;
             }
@@ -545,6 +563,14 @@
                 return;
             }
             this.handleError(e);
+        }
+
+        /** A quiet rejoin gets a line in the console: it says why the server stopped knowing this page. */
+        noteRejoin(code, during) {
+            this.rejoins.push({ code, at: Date.now() });
+            if (this.rejoins.length > 20) this.rejoins.shift();
+            console.info('[audio-rooms] rejoining: the server answered "' + code + '" to a ' + during +
+                ' (failed check-ins before it: ' + this.failures + ', the last successful one took ' + this.lastSyncMs + ' ms)');
         }
 
         /** Stop audio and syncing after a final answer from the server. */
@@ -570,6 +596,7 @@
             }
             if ((code === 'session_expired' || code === 'not_a_member') && this.joined) {
                 // The room session lapsed during an action: reconnect quietly.
+                this.noteRejoin(code, 'action');
                 this.api.request('POST', '/join', this.joinBody()).then((data) => this.onJoined(data), (err) => {
                     if (err.code !== code) this.handleError(err);
                 });
@@ -2038,7 +2065,8 @@
             const yes = this.tr('diag_yes'), no = this.tr('diag_no');
             body.innerHTML = '<div class="car-diag-row">' + esc(this.tr('diag_relay')) + ': <strong>' + esc(this.hasRelay() ? this.tr('diag_configured') : this.tr('diag_not_configured')) + '</strong>' +
                 ' · ' + esc(this.tr('diag_stun')) + ': ' + esc(stun ? yes : no) + ' · ' + esc(this.tr('diag_relay_used')) + ': ' + esc(relay ? yes : no) +
-                ' · policy ' + esc(this.iceTransportPolicy) + '</div>' +
+                ' · policy ' + esc(this.iceTransportPolicy) + ' · rejoins ' + this.rejoins.length +
+                (this.lastSyncMs ? ' · check-in ' + this.lastSyncMs + ' ms' : '') + '</div>' +
                 (rows.length ? rows.join('') : '<div class="car-diag-row">—</div>') +
                 '<div class="car-diag-row car-diag-ua">' + esc(navigator.userAgent) + '</div>';
         }

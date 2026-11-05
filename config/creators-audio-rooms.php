@@ -80,8 +80,9 @@ return [
     */
 
     'lifecycle' => [
-        // A member with no heartbeat for this long is treated as disconnected.
-        'presence_timeout_seconds' => 25,
+        // A member with no successful check-in for this long is treated as disconnected. Generous on purpose: a
+        // server that answers slowly for half a minute must not make everyone's audio links rebuild.
+        'presence_timeout_seconds' => 60,
         // Pages in the background (phone locked, tab hidden) check in rarely; give them longer.
         'presence_hidden_timeout_seconds' => 150,
         // With no host connected, the room ends after this grace period.

@@ -39,7 +39,8 @@ final class SessionToken
     }
 
     /** Returns null for anything tampered with, malformed or expired. */
-    public static function decode(?string $token): ?self
+    /** $allowExpired reads a lapsed token whose signature still verifies (used to resume a connection). */
+    public static function decode(?string $token, bool $allowExpired = false): ?self
     {
         if (! is_string($token) || substr_count($token, '.') !== 1) {
             return null;
@@ -55,7 +56,7 @@ final class SessionToken
         if (! is_array($data) || ! isset($data['r'], $data['p'], $data['c'], $data['e'])) {
             return null;
         }
-        if ((int) $data['e'] < now()->getTimestamp()) {
+        if (! $allowExpired && (int) $data['e'] < now()->getTimestamp()) {
             return null;
         }
 

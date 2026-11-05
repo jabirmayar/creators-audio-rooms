@@ -39,8 +39,13 @@ class GuardParticipantResolver implements ParticipantResolver
                 continue;
             }
 
-            // Session and token guards expose their user provider; other guards cannot look users up.
             $instance = Auth::guard($guard);
+            // When the request also carries the app's session, the signed-in account is this very person: no second lookup.
+            $current = $instance->user();
+            if ($current instanceof Authenticatable && (string) $current->getAuthIdentifier() === $id) {
+                return $this->identityFor($current, $options);
+            }
+            // Session and token guards expose their user provider; other guards cannot look users up.
             $provider = method_exists($instance, 'getProvider') ? $instance->getProvider() : null;
             $user = $provider instanceof UserProvider ? $provider->retrieveById($id) : null;
 

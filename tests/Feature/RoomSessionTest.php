@@ -98,6 +98,8 @@ class RoomSessionTest extends ApiTestCase
         $host = $this->staff();
         $roomId = $this->createLiveRoom($host);
         $oldTab = $this->sessions[$this->keyOf($host)];
+        // A new tab has no room session token of its own.
+        unset($this->sessions[$this->keyOf($host)]);
         $this->join($host, $roomId)->assertOk();
 
         $this->as($host);

@@ -110,7 +110,12 @@ class RoomApiController extends Controller
         $data = $request->validate(['as' => ['nullable', 'in:monitor']]);
         $who = $this->who($request);
         $room = $this->viewable($who, $room);
-        $joined = $this->rooms->join($who, $room, ($data['as'] ?? null) === 'monitor');
+        // A page rejoining after its room session lapsed, or after a slow spell made the server treat it as
+        // gone, still sends its old token. Signed for this person and room, it lets them keep their connection
+        // id, so nobody else's audio link to them is rebuilt.
+        $previous = SessionToken::decode($request->header(self::TOKEN_HEADER), allowExpired: true);
+        $resume = $previous && $previous->roomId === $room->id && $previous->participantKey === $who->key ? $previous->connectionId : null;
+        $joined = $this->rooms->join($who, $room, ($data['as'] ?? null) === 'monitor', $resume);
         $iceServers = $this->iceServers->forParticipant($who);
         // Relay-only needs a relay: if none came back (e.g. Cloudflare unreachable), connect directly instead of not at all.
         $hasRelay = collect($iceServers)->contains(fn ($s) => collect((array) ($s['urls'] ?? []))->contains(fn ($u) => preg_match('/^turns?:/i', (string) $u)));

@@ -36,6 +36,8 @@ class SignalingTest extends ApiTestCase
         $roomId = $this->createLiveRoom($host);
         $oldTab = $this->sessions[$this->keyOf($host)];
 
+        // A new tab has no room session token of its own.
+        unset($this->sessions[$this->keyOf($host)]);
         $this->join($host, $roomId)->assertOk();
         $this->sync($host, $roomId)->assertOk();
 
