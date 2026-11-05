@@ -218,9 +218,11 @@ class RoomManager
      * do not take a listener place, are not blocked by a room-level removal or
      * ban, and are shown to everyone in the room.
      *
+     * $resumeConnection: the connection id from the page's previous (possibly
+     * lapsed) room session; kept when it is still this member's (see the join endpoint).
+     *
      * @return array{member: Member, token: SessionToken, rejoined: bool}
      */
-    /** $resumeConnection: the connection id from the page's previous (possibly lapsed) room session, if any. */
     public function join(ParticipantIdentity $who, Room $room, bool $asMonitor = false, ?string $resumeConnection = null): array
     {
         $check = fn (Room $room) => $asMonitor ? $this->access->ensureCanMonitor($who, $room) : $this->access->ensureCanJoin($who, $room);
