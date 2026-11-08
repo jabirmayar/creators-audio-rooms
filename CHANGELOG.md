@@ -6,6 +6,7 @@ All notable changes to this package are documented here. The format follows [Kee
 
 ### Changed
 
+- Cloudflare Realtime session creation sends no request body, as required by `POST /sessions/new`. Failed microphone publishing retries with exponential backoff instead of repeating on every room sync.
 - Cloudflare Realtime SFU request failures log the operation, response description, and Cloudflare Ray ID when available, so decoding and validation errors can be diagnosed without logging SDP or credentials.
 
 ## 1.12.0 - 2026-11-04

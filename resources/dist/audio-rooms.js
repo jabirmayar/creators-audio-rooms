@@ -183,6 +183,8 @@
             this.sfuAudios = new Map();
             this.sfuPublisher = null;
             this.sfuPublisherStarting = null;
+            this.sfuPublisherRetryAt = 0;
+            this.sfuPublisherRetryDelay = 1500;
             this.sfuReceiver = null;
             this.sfuReceiverSignature = '';
             this.sfuReceiverStarting = null;
@@ -941,6 +943,8 @@
                     await this.waitForPeerConnected(pc);
                     await this.api.request('POST', '/sfu/ready', { session_id: response.session_id });
                     publisher.ready = true;
+                    this.sfuPublisherRetryAt = 0;
+                    this.sfuPublisherRetryDelay = 1500;
                     if (!this.sendingTrack()) await publisher.sender.replaceTrack(null).catch(() => {});
                     if (pc.connectionState === 'failed') {
                         this.closeSfuPublisher(true);
@@ -952,6 +956,8 @@
                     if (this.sfuPublisher === publisher) this.sfuPublisher = null;
                     try { pc.close(); } catch (ignore) { /* already closed */ }
                     if (this.joined) this.api.request('POST', '/sfu/unpublish', {}).catch(() => {});
+                    this.sfuPublisherRetryAt = Date.now() + this.sfuPublisherRetryDelay;
+                    this.sfuPublisherRetryDelay = Math.min(30000, this.sfuPublisherRetryDelay * 2);
                     this.notice = { kind: 'error', text: (e && e.message) || this.tr('error_generic') };
                     this.render();
                 }
@@ -991,7 +997,7 @@
             }
             if (!ROLE_SPEAKS[me.role] && this.sfuPublisher) this.closeSfuPublisher(true);
             const track = this.sendingTrack();
-            if (track && !this.sfuPublisher && !this.sfuPublisherStarting) this.startSfuPublisher(track);
+            if (track && !this.sfuPublisher && !this.sfuPublisherStarting && Date.now() >= this.sfuPublisherRetryAt) this.startSfuPublisher(track);
 
             const publishers = this.members().filter((member) => member.key !== me.key && member.sfu_publisher && ROLE_SPEAKS[member.role]);
             const signature = publishers.map((member) => member.key + ':' + member.conn + ':' + member.sfu_publisher).sort().join('|');

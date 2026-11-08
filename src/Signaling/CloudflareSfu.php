@@ -91,7 +91,11 @@ class CloudflareSfu
             $request = Http::timeout(max(3, (int) ($config['timeout_seconds'] ?? 10)))
                 ->withToken((string) $config['app_secret'])
                 ->acceptJson();
-            $response = $body === null ? $request->{$method}($url) : $request->{$method}($url, $body);
+            // Laravel's post($url) supplies an empty array by default, which is sent as `[]`.
+            // Cloudflare's /sessions/new endpoint requires an actually empty request body.
+            $response = $body === null
+                ? $request->send(strtoupper($method), $url)
+                : $request->{$method}($url, $body);
             $data = (array) $response->json();
             if (! $response->successful() || isset($data['errorCode'])) {
                 $code = (string) ($data['errorCode'] ?? 'http_'.$response->status());
