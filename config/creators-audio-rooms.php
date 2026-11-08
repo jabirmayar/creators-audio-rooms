@@ -181,9 +181,9 @@ return [
     /*
     | Connection details panel (room URL with ?debug=1, or the button in a
     | "could not connect" message) and connection messages in the browser
-    | console. Useful while setting up; turn off to hide them from users.
+    | console. Keep off by default and opt in per room with ?debug=1.
     */
-    'diagnostics' => env('AUDIO_ROOMS_DIAGNOSTICS', true),
+    'diagnostics' => env('AUDIO_ROOMS_DIAGNOSTICS', false),
 
     /*
     | While someone is in a room, links to your site's other pages open in a new

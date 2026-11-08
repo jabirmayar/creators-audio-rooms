@@ -210,9 +210,10 @@
             this.connection = null;    // this page's connection id, from its last join
             this.lastSyncMs = 0;       // how long the last check-in took
             this.rejoins = [];         // { code, at } of each quiet rejoin, for the diagnostics panel
-            // Connection details (?debug=1, or the button in a "could not connect" message); off when the app disables diagnostics.
-            this.diagnostics = config.diagnostics !== false;
-            this.showDiag = this.diagnostics && /[?&]debug=1(&|$)/.test(window.location.search);
+            // Diagnostics are hidden by default; ?debug=1 enables them for this room.
+            this.debugRequested = /[?&]debug=1(&|$)/.test(window.location.search);
+            this.diagnostics = config.diagnostics !== false || this.debugRequested;
+            this.showDiag = this.diagnostics && this.debugRequested;
             this.diagTimer = null;
 
             this.el.classList.add('car-root');
