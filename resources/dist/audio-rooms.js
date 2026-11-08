@@ -1362,8 +1362,7 @@
             if (this.transportMode === 'sfu') {
                 if (!m.sfu_publisher) return 'linking';
                 return this.sfuReceiver && this.sfuReceiver.pc.connectionState === 'connected'
-                    && this.sfuReceiver.publishers && this.sfuReceiver.publishers.get(m.key) === m.sfu_publisher
-                    && this.sfuAudios.has(m.key) ? 'ok' : 'linking';
+                    && this.sfuReceiver.publishers && this.sfuReceiver.publishers.get(m.key) === m.sfu_publisher ? 'ok' : 'linking';
             }
             const peer = this.peers.get(m.key);
             if (peer) return peer.failed ? 'failed' : (linkState(peer.pc) === 'connected' ? 'ok' : 'linking');
