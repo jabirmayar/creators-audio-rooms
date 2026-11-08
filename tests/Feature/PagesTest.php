@@ -32,15 +32,15 @@ class PagesTest extends ApiTestCase
         $this->assertSame(1, substr_count($html, 'audio-rooms.js'), 'assets are included once');
     }
 
-    public function test_diagnostics_can_be_turned_off(): void
+    public function test_diagnostics_are_off_by_default_and_can_be_configured_on(): void
     {
         $roomId = $this->createLiveRoom($this->staff());
         $this->as($this->member());
 
-        $this->assertStringContainsString('&quot;diagnostics&quot;:true', $this->get('/audio-rooms/'.$roomId)->getContent());
-
-        config(['creators-audio-rooms.diagnostics' => false]);
         $this->assertStringContainsString('&quot;diagnostics&quot;:false', $this->get('/audio-rooms/'.$roomId)->getContent());
+
+        config(['creators-audio-rooms.diagnostics' => true]);
+        $this->assertStringContainsString('&quot;diagnostics&quot;:true', $this->get('/audio-rooms/'.$roomId)->getContent());
     }
 
     public function test_rooms_from_another_tenant_are_not_listed_or_viewable(): void

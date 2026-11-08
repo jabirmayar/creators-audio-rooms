@@ -23,7 +23,10 @@ class CloudflareSfu
         return $this->request('post', '/sessions/new');
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * @param array{type: string, sdp: string} $sessionDescription
+     * @return array<string, mixed>
+     */
     public function publish(string $sessionId, array $sessionDescription, string $mid, string $trackName = 'audio'): array
     {
         return $this->request('post', '/sessions/'.rawurlencode($sessionId).'/tracks/new', [
@@ -46,7 +49,10 @@ class CloudflareSfu
         ]);
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * @param array{type: string, sdp: string} $sessionDescription
+     * @return array<string, mixed>
+     */
     public function renegotiate(string $sessionId, array $sessionDescription): array
     {
         return $this->request('put', '/sessions/'.rawurlencode($sessionId).'/renegotiate', [
@@ -54,7 +60,11 @@ class CloudflareSfu
         ]);
     }
 
-    /** Force-close a track when its browser leaves or loses its connection. */
+    /**
+     * Force-close a track when its browser leaves or loses its connection.
+     *
+     * @return array<string, mixed>
+     */
     public function closeTrack(string $sessionId, string $mid): array
     {
         return $this->request('put', '/sessions/'.rawurlencode($sessionId).'/tracks/close', [
@@ -63,7 +73,10 @@ class CloudflareSfu
         ]);
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * @param array<string, mixed>|null $body
+     * @return array<string, mixed>
+     */
     private function request(string $method, string $path, ?array $body = null): array
     {
         if (! self::configured()) {

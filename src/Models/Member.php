@@ -29,6 +29,10 @@ use Illuminate\Support\Carbon;
  * @property ?Carbon $joined_at
  * @property ?Carbon $last_seen_at
  * @property ?Carbon $left_at
+ * @property ?string $sfu_publisher_session_id
+ * @property ?string $sfu_publisher_mid
+ * @property bool $sfu_publisher_ready
+ * @property ?string $sfu_receiver_session_id
  */
 class Member extends Model
 {

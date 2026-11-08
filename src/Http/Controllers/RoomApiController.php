@@ -134,7 +134,15 @@ class RoomApiController extends Controller
         }
         $iceServers = $this->iceServers->forParticipant($who);
         // Relay-only needs a relay: if none came back (e.g. Cloudflare unreachable), connect directly instead of not at all.
-        $hasRelay = collect($iceServers)->contains(fn ($s) => collect((array) ($s['urls'] ?? []))->contains(fn ($u) => preg_match('/^turns?:/i', (string) $u)));
+        $hasRelay = false;
+        foreach ($iceServers as $server) {
+            foreach ($server['urls'] ?? [] as $url) {
+                if (preg_match('/^turns?:/i', $url) === 1) {
+                    $hasRelay = true;
+                    break 2;
+                }
+            }
+        }
         return response()->json([
             'session' => $joined['token']->encode(),
             'session_expires_at' => $joined['token']->expiresAt,
@@ -179,7 +187,13 @@ class RoomApiController extends Controller
             throw new \RuntimeException('Cloudflare Realtime did not return a publishing session.');
         }
         $published = $this->sfu->publish($sessionId, $data['session_description'], $data['mid']);
-        $track = collect($published['tracks'] ?? [])->first(fn ($track) => is_array($track) && empty($track['errorCode']));
+        $track = null;
+        foreach ($published['tracks'] ?? [] as $candidate) {
+            if (is_array($candidate) && empty($candidate['errorCode'])) {
+                $track = $candidate;
+                break;
+            }
+        }
         if (! is_array($track) || empty($published['sessionDescription']['sdp'])) {
             throw new \RuntimeException('Cloudflare Realtime could not publish this microphone.');
         }
