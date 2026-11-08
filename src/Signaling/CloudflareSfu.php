@@ -24,7 +24,7 @@ class CloudflareSfu
     }
 
     /**
-     * @param array{type: string, sdp: string} $sessionDescription
+     * @param  array{type: string, sdp: string}  $sessionDescription
      * @return array<string, mixed>
      */
     public function publish(string $sessionId, array $sessionDescription, string $mid, string $trackName = 'audio'): array
@@ -36,7 +36,7 @@ class CloudflareSfu
     }
 
     /** @param list<array{sessionId: string, trackName: string}> $publications
-     *  @return array<string, mixed>
+     * @return array<string, mixed>
      */
     public function subscribe(string $sessionId, array $publications): array
     {
@@ -50,7 +50,7 @@ class CloudflareSfu
     }
 
     /**
-     * @param array{type: string, sdp: string} $sessionDescription
+     * @param  array{type: string, sdp: string}  $sessionDescription
      * @return array<string, mixed>
      */
     public function renegotiate(string $sessionId, array $sessionDescription): array
@@ -74,7 +74,7 @@ class CloudflareSfu
     }
 
     /**
-     * @param array<string, mixed>|null $body
+     * @param  array<string, mixed>|null  $body
      * @return array<string, mixed>
      */
     private function request(string $method, string $path, ?array $body = null): array

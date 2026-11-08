@@ -8,8 +8,8 @@ use daacreators\CreatorsAudioRooms\Models\Room;
 use daacreators\CreatorsAudioRooms\Services\RoomAccess;
 use daacreators\CreatorsAudioRooms\Services\RoomManager;
 use daacreators\CreatorsAudioRooms\Services\RoomStatePresenter;
-use daacreators\CreatorsAudioRooms\Signaling\IceServers;
 use daacreators\CreatorsAudioRooms\Signaling\CloudflareSfu;
+use daacreators\CreatorsAudioRooms\Signaling\IceServers;
 use daacreators\CreatorsAudioRooms\Signaling\SessionToken;
 use daacreators\CreatorsAudioRooms\Signaling\SignalRelay;
 use daacreators\CreatorsAudioRooms\Signaling\SignalStore;
@@ -128,7 +128,11 @@ class RoomApiController extends Controller
         if ($resume === null || $resume !== $joined['member']->connection_id) {
             $old = $joined['member'];
             if ($old->sfu_publisher_session_id && $old->sfu_publisher_mid) {
-                try { $this->sfu->closeTrack($old->sfu_publisher_session_id, $old->sfu_publisher_mid); } catch (\Throwable $e) { report($e); }
+                try {
+                    $this->sfu->closeTrack($old->sfu_publisher_session_id, $old->sfu_publisher_mid);
+                } catch (\Throwable $e) {
+                    report($e);
+                }
             }
             $old->forceFill(['sfu_publisher_session_id' => null, 'sfu_publisher_mid' => null, 'sfu_publisher_ready' => false, 'sfu_receiver_session_id' => null])->save();
         }
@@ -143,6 +147,7 @@ class RoomApiController extends Controller
                 }
             }
         }
+
         return response()->json([
             'session' => $joined['token']->encode(),
             'session_expires_at' => $joined['token']->expiresAt,
@@ -318,6 +323,7 @@ class RoomApiController extends Controller
             $member->forceFill(['sfu_publisher_session_id' => null, 'sfu_publisher_mid' => null, 'sfu_publisher_ready' => false])->save();
             $roomModel->increment('version');
         }
+
         return response()->json(['ok' => true]);
     }
 
