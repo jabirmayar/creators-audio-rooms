@@ -1360,6 +1360,7 @@
             if (!this.joined || !me || m.key === me.key) return null;
             if (!ROLE_SPEAKS[me.role] && !ROLE_SPEAKS[m.role]) return null;
             if (this.transportMode === 'sfu') {
+                if (!ROLE_SPEAKS[m.role] || m.self_muted || m.moderator_muted) return null;
                 if (!m.sfu_publisher) return 'linking';
                 return this.sfuReceiver && this.sfuReceiver.pc.connectionState === 'connected'
                     && this.sfuReceiver.publishers && this.sfuReceiver.publishers.get(m.key) === m.sfu_publisher ? 'ok' : 'linking';
