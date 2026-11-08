@@ -95,7 +95,18 @@ class CloudflareSfu
             $data = (array) $response->json();
             if (! $response->successful() || isset($data['errorCode'])) {
                 $code = (string) ($data['errorCode'] ?? 'http_'.$response->status());
-                Log::warning('creators-audio-rooms: Cloudflare SFU request failed', ['code' => $code, 'status' => $response->status()]);
+                $context = [
+                    'operation' => strtoupper($method).' '.$path,
+                    'code' => $code,
+                    'status' => $response->status(),
+                ];
+                if (is_string($data['errorDescription'] ?? null)) {
+                    $context['description'] = substr(trim(preg_replace('/[\x00-\x1F\x7F]/u', ' ', $data['errorDescription']) ?? ''), 0, 400);
+                }
+                if ($response->header('cf-ray')) {
+                    $context['cf_ray'] = $response->header('cf-ray');
+                }
+                Log::warning('creators-audio-rooms: Cloudflare SFU request failed', $context);
                 throw new RuntimeException('Cloudflare Realtime could not complete the audio connection ('.$code.').');
             }
 
