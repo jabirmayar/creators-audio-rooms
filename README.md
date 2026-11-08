@@ -11,7 +11,8 @@
 
 Live audio rooms for Laravel, in the style of X/Twitter Spaces: hosts, speakers and listeners, hand raising and moderation.
 
-- **Nothing extra to host.** Audio travels directly between browsers (peer-to-peer WebRTC). Room updates and connection setup go through ordinary requests to your own Laravel app. No media server, WebSocket server or queue worker is required.
+- **Easy default, with room to scale.** By default audio travels directly between browsers (peer-to-peer WebRTC), so no extra media server or WebSocket server is required. Cloudflare Realtime SFU is available as an alternative transport.
+- **Optional Cloudflare Realtime SFU.** Select direct WebRTC, TURN relay, or SFU transport. SFU sessions and room publication permissions are managed by Laravel; the Cloudflare App Secret stays server-side.
 - **Works with any user setup.** Several user tables or guards, integer IDs, UUIDs or external identity providers. Your app maps its users, permissions, audiences and tenants through small integration classes.
 - **No frontend stack imposed.** A prebuilt, dependency-free browser bundle and a Blade component. No Livewire, Filament, Vue, React or build step.
 - **Secure by default.** Every action and every connection message is authorized on the server. Hiding a button is never relied on.
@@ -184,6 +185,12 @@ $room = app(RoomManager::class)->create($participant, [
 `$participant` is a `ParticipantIdentity`, usually obtained from your participant resolver (see below). Creating a room runs the same authorization as the API.
 
 ## Connectivity and performance
+
+### Cloudflare Realtime SFU
+
+The default transport is direct WebRTC with TURN available for restrictive networks. Set `transport_mode` to `sfu` to send each participant's microphone to Cloudflare Realtime and subscribe to the room's active speakers. Create a Serverless SFU application in the Cloudflare dashboard and set `AUDIO_ROOMS_CLOUDFLARE_SFU_APP_ID` and `AUDIO_ROOMS_CLOUDFLARE_SFU_APP_SECRET` on the server. Never place the App Secret in browser code. The host application can also provide these values from its encrypted settings store.
+
+SFU publishing and receiving use separate WebRTC sessions. The application must keep the session and publication identifiers tied to the authorized room member, and complete each Cloudflare offer/answer exchange before the next mutation. Cloudflare Realtime's SFU and TURN share usage-based egress billing; see [Cloudflare's current pricing](https://developers.cloudflare.com/realtime/sfu/pricing/).
 
 ### TURN relay
 

@@ -180,6 +180,13 @@
             this.failures = 0;
 
             this.peers = new Map();   // key -> { pc, signature, audio, stream, analyser, pending: [], failed, polite }
+            this.sfuAudios = new Map();
+            this.sfuPublisher = null;
+            this.sfuPublisherStarting = null;
+            this.sfuReceiver = null;
+            this.sfuReceiverSignature = '';
+            this.sfuReceiverStarting = null;
+            this.transportMode = 'webrtc';
             this.outbox = new Map();  // key -> last signal sent to that person (keeps them in order)
             this.localStream = null;
             this.micStarting = false;
@@ -396,6 +403,7 @@
             this.api.session = data.session;
             if (!resumed) this.cursor = data.cursor || 0;
             this.iceServers = data.ice_servers || [];
+            this.transportMode = ['webrtc', 'turn', 'sfu'].includes(data.transport_mode) ? data.transport_mode : 'webrtc';
             this.pendingMute = null;
             this.muteRetries = 0;
             this.maxBitrate = (data.audio && data.audio.max_bitrate) || 0;
@@ -640,6 +648,7 @@
             }
             this.state = state;
             this.version = state.room.version;
+            this.sfuAudios.forEach((peer, key) => this.applyRemoteMute(key, this.members().find((item) => item.key === key)));
             this.onSelfChanged(before, state.me);
             this.onRequestsChanged(state);
             if (state.room.status === 'ended' && this.joined) {
@@ -795,6 +804,9 @@
                     if (tr.sender && tr.sender.track) tr.sender.replaceTrack(null).catch(() => {});
                 });
             });
+            if (this.sfuPublisher && this.sfuPublisher.sender) {
+                this.sfuPublisher.sender.replaceTrack(null).catch(() => {});
+            }
         }
 
         setTrackEnabled(enabled) {
@@ -819,6 +831,14 @@
 
         attachLocalTrack() {
             const track = this.sendingTrack();
+            if (this.transportMode === 'sfu') {
+                if (this.sfuPublisher && this.sfuPublisher.sender) {
+                    this.sfuPublisher.sender.replaceTrack(track).catch(() => {});
+                } else if (track) {
+                    this.startSfuPublisher(track);
+                }
+                return;
+            }
             this.peers.forEach((peer) => {
                 const tr = peer.pc.getTransceivers()[0];
                 if (tr && (tr.direction === 'sendrecv' || tr.direction === 'sendonly') && tr.sender.track !== track) {
@@ -849,6 +869,187 @@
             return [].concat(this.state.hosts || [], this.state.speakers || [], this.state.listeners || [], this.state.monitors || []);
         }
 
+        waitForIceGathering(pc) {
+            if (pc.iceGatheringState === 'complete') return Promise.resolve();
+            return new Promise((resolve) => {
+                const done = () => { clearTimeout(timer); pc.removeEventListener('icegatheringstatechange', check); resolve(); };
+                const check = () => { if (pc.iceGatheringState === 'complete') done(); };
+                const timer = setTimeout(done, 4000);
+                pc.addEventListener('icegatheringstatechange', check);
+            });
+        }
+
+        waitForPeerConnected(pc, timeoutMs) {
+            if (pc.connectionState === 'connected') return Promise.resolve();
+            return new Promise((resolve, reject) => {
+                const finish = (error) => {
+                    clearTimeout(timer);
+                    pc.removeEventListener('connectionstatechange', check);
+                    error ? reject(error) : resolve();
+                };
+                const check = () => {
+                    if (pc.connectionState === 'connected') finish();
+                    else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') finish(new Error('Cloudflare SFU could not establish an audio connection.'));
+                };
+                const timer = setTimeout(() => finish(new Error('Cloudflare SFU connection timed out. Please check the network and retry.')), timeoutMs || 20000);
+                pc.addEventListener('connectionstatechange', check);
+                check();
+            });
+        }
+
+        async startSfuPublisher(track) {
+            if (this.sfuPublisherStarting || this.sfuPublisher || !this.joined) return this.sfuPublisherStarting;
+            this.sfuPublisherStarting = (async () => {
+                const pc = new RTCPeerConnection({ iceServers: this.iceServers, bundlePolicy: 'max-bundle' });
+                const transceiver = pc.addTransceiver(track, { direction: 'sendonly' });
+                const publisher = { pc, sender: transceiver.sender, mid: null, sessionId: null, ready: false, disconnectTimer: null };
+                this.sfuPublisher = publisher;
+                pc.addEventListener('connectionstatechange', () => {
+                    if (pc.connectionState === 'connected') clearTimeout(publisher.disconnectTimer);
+                    if (publisher.ready && pc.connectionState === 'disconnected') {
+                        clearTimeout(publisher.disconnectTimer);
+                        publisher.disconnectTimer = setTimeout(() => {
+                            if (pc.connectionState === 'disconnected' && this.sfuPublisher === publisher) {
+                                this.closeSfuPublisher(true);
+                                setTimeout(() => this.attachLocalTrack(), 1200);
+                            }
+                        }, 6000);
+                    }
+                    if (publisher.ready && pc.connectionState === 'failed' && this.sfuPublisher === publisher) {
+                        clearTimeout(publisher.disconnectTimer);
+                        this.closeSfuPublisher(true);
+                        setTimeout(() => this.attachLocalTrack(), 1200);
+                    }
+                });
+                try {
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    await this.waitForIceGathering(pc);
+                    publisher.mid = transceiver.mid;
+                    const response = await this.api.request('POST', '/sfu/publish', {
+                        session_description: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
+                        mid: transceiver.mid,
+                    });
+                    if (this.sfuPublisher !== publisher || !this.joined) {
+                        pc.close();
+                        if (this.joined) this.api.request('POST', '/sfu/unpublish', {}).catch(() => {});
+                        return;
+                    }
+                    await pc.setRemoteDescription(response.session_description);
+                    publisher.sessionId = response.session_id;
+                    await this.waitForPeerConnected(pc);
+                    await this.api.request('POST', '/sfu/ready', { session_id: response.session_id });
+                    publisher.ready = true;
+                    if (!this.sendingTrack()) await publisher.sender.replaceTrack(null).catch(() => {});
+                    if (pc.connectionState === 'failed') {
+                        this.closeSfuPublisher(true);
+                        setTimeout(() => this.attachLocalTrack(), 1200);
+                        return;
+                    }
+                    this.reconcileSfu();
+                } catch (e) {
+                    if (this.sfuPublisher === publisher) this.sfuPublisher = null;
+                    try { pc.close(); } catch (ignore) { /* already closed */ }
+                    if (this.joined) this.api.request('POST', '/sfu/unpublish', {}).catch(() => {});
+                    this.notice = { kind: 'error', text: (e && e.message) || this.tr('error_generic') };
+                    this.render();
+                }
+            })().finally(() => { this.sfuPublisherStarting = null; });
+            return this.sfuPublisherStarting;
+        }
+
+        closeSfuPublisher(unpublish) {
+            const publisher = this.sfuPublisher;
+            if (!publisher) return;
+            this.sfuPublisher = null;
+            try { publisher.pc.close(); } catch (e) { /* already closed */ }
+            if (unpublish && this.joined) this.api.request('POST', '/sfu/unpublish', {}).catch(() => {});
+        }
+
+        closeSfuReceiver() {
+            if (this.sfuReceiver) {
+                try { this.sfuReceiver.pc.close(); } catch (e) { /* already closed */ }
+                this.sfuReceiver = null;
+            }
+            this.sfuReceiverSignature = '';
+            this.sfuAudios.forEach((peer, key) => {
+                if (peer.audio) { peer.audio.srcObject = null; peer.audio.remove(); }
+                if (peer.analyser) peer.analyser.source.disconnect();
+                this.speaking.delete(key);
+            });
+            this.sfuAudios.clear();
+        }
+
+        async reconcileSfu() {
+            if (!this.joined || !this.state || !this.state.me) return;
+            const me = this.state.me;
+            if (me.role === 'monitor') {
+                if (this.sfuPublisher) this.closeSfuPublisher(true);
+                this.closeSfuReceiver();
+                return;
+            }
+            if (!ROLE_SPEAKS[me.role] && this.sfuPublisher) this.closeSfuPublisher(true);
+            const track = this.sendingTrack();
+            if (track && !this.sfuPublisher && !this.sfuPublisherStarting) this.startSfuPublisher(track);
+
+            const publishers = this.members().filter((member) => member.key !== me.key && member.sfu_publisher && ROLE_SPEAKS[member.role]);
+            const signature = publishers.map((member) => member.key + ':' + member.conn + ':' + member.sfu_publisher).sort().join('|');
+            if (this.sfuReceiverStarting) { this.sfuReceiverWanted = signature; return; }
+            if (this.sfuReceiver && this.sfuReceiverSignature === signature && !['failed', 'closed'].includes(this.sfuReceiver.pc.connectionState)) return;
+            if (this.sfuReceiverSignature !== signature) this.closeSfuReceiver();
+            if (!publishers.length) return;
+
+            this.sfuReceiverWanted = signature;
+            this.sfuReceiverStarting = (async () => {
+                let pc = null;
+                try {
+                    const subscribe = await this.api.request('POST', '/sfu/subscribe', { publishers: publishers.map((member) => member.key) });
+                    if (!subscribe.session_description || !subscribe.subscriptions || !subscribe.subscriptions.length) return;
+                    pc = new RTCPeerConnection({ iceServers: this.iceServers, bundlePolicy: 'max-bundle' });
+                    const receiver = { pc, sessionId: subscribe.session_id, byMid: new Map() };
+                    subscribe.subscriptions.forEach((item) => receiver.byMid.set(String(item.mid), item.key));
+                    this.sfuReceiver = receiver;
+                    this.sfuReceiverSignature = signature;
+                    pc.addEventListener('track', (event) => {
+                        const key = receiver.byMid.get(String(event.transceiver.mid));
+                        if (key) this.onSfuRemoteTrack(key, event);
+                    });
+                    let disconnectTimer = null;
+                    pc.addEventListener('connectionstatechange', () => {
+                        if (pc.connectionState === 'connected') clearTimeout(disconnectTimer);
+                        if (pc.connectionState === 'disconnected') {
+                            clearTimeout(disconnectTimer);
+                            disconnectTimer = setTimeout(() => {
+                                if (pc.connectionState === 'disconnected' && this.sfuReceiver === receiver) {
+                                    this.closeSfuReceiver();
+                                    setTimeout(() => this.reconcileSfu(), 1200);
+                                }
+                            }, 6000);
+                        }
+                        if (pc.connectionState === 'failed' && this.sfuReceiver === receiver) {
+                            clearTimeout(disconnectTimer);
+                            this.closeSfuReceiver();
+                            setTimeout(() => this.reconcileSfu(), 1200);
+                        }
+                    });
+                    await pc.setRemoteDescription(subscribe.session_description);
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    await this.waitForIceGathering(pc);
+                    await this.api.request('POST', '/sfu/renegotiate', {
+                        session_id: subscribe.session_id,
+                        session_description: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
+                    });
+                    if (this.sfuReceiverWanted !== signature) this.reconcileSfu();
+                } catch (e) {
+                    if (this.sfuReceiver && this.sfuReceiver.pc === pc) this.closeSfuReceiver();
+                    else if (pc) try { pc.close(); } catch (ignore) { /* already closed */ }
+                    this.notice = { kind: 'error', text: (e && e.message) || this.tr('error_generic') };
+                    this.render();
+                }
+            })().finally(() => { this.sfuReceiverStarting = null; });
+        }
+
         /**
          * Connect to everyone where at least one side speaks. The speaker starts;
          * between two speakers the smaller key starts. Role changes rebuild the link.
@@ -870,6 +1071,10 @@
 
         reconcilePeers() {
             if (!this.joined || !this.state || !this.state.me) return;
+            if (this.transportMode === 'sfu') {
+                this.reconcileSfu();
+                return;
+            }
             const wanted = this.wantedLinks();
 
             this.peers.forEach((peer, key) => {
@@ -1113,6 +1318,10 @@
             const me = this.state && this.state.me;
             if (!this.joined || !me || m.key === me.key) return null;
             if (!ROLE_SPEAKS[me.role] && !ROLE_SPEAKS[m.role]) return null;
+            if (this.transportMode === 'sfu') {
+                if (!m.sfu_publisher) return 'linking';
+                return this.sfuReceiver && this.sfuReceiver.pc.connectionState === 'connected' ? 'ok' : 'linking';
+            }
             const peer = this.peers.get(m.key);
             if (peer) return peer.failed ? 'failed' : (linkState(peer.pc) === 'connected' ? 'ok' : 'linking');
             return this.unreachable.has(m.key) ? 'failed' : 'linking';
@@ -1121,6 +1330,7 @@
         onRemoteTrack(key, event) {
             const peer = this.peers.get(key);
             if (!peer) return;
+            peer.receiver = event.receiver;
             const stream = (event.streams && event.streams[0]) || new MediaStream([event.track]);
             peer.stream = stream;
             if (!peer.audio) {
@@ -1136,9 +1346,30 @@
             this.meterStream(key, stream);
         }
 
+        onSfuRemoteTrack(key, event) {
+            const member = this.members().find((item) => item.key === key);
+            if (!member || !ROLE_SPEAKS[member.role]) return;
+            const peer = this.sfuAudios.get(key) || {};
+            const stream = (event.streams && event.streams[0]) || new MediaStream([event.track]);
+            peer.receiver = event.receiver;
+            peer.stream = stream;
+            if (!peer.audio) {
+                peer.audio = document.createElement('audio');
+                peer.audio.autoplay = true;
+                peer.audio.setAttribute('playsinline', '');
+                peer.audio.hidden = true;
+                this.el.appendChild(peer.audio);
+            }
+            peer.audio.srcObject = stream;
+            this.sfuAudios.set(key, peer);
+            this.applyRemoteMute(key, member);
+            this.play(peer.audio);
+            this.meterStream(key, stream);
+        }
+
         /** Receiver-side enforcement: never play someone who is not allowed to speak. */
         applyRemoteMute(key, member) {
-            const peer = this.peers.get(key);
+            const peer = this.sfuAudios.get(key) || this.peers.get(key);
             if (!peer || !peer.audio) return;
             peer.audio.muted = !member || !ROLE_SPEAKS[member.role] || member.moderator_muted;
         }
@@ -1167,6 +1398,7 @@
                 };
             }
             this.peers.forEach((peer) => { if (peer.audio) peer.audio.play().catch(() => {}); });
+            this.sfuAudios.forEach((peer) => { if (peer.audio) peer.audio.play().catch(() => {}); });
             this.audioBlocked = false;
             this.setMediaSession();
         }
@@ -1521,6 +1753,8 @@
 
         closeAllPeers() {
             Array.from(this.peers.keys()).forEach((key) => this.closePeer(key, false));
+            this.closeSfuPublisher(false);
+            this.closeSfuReceiver();
         }
 
         // Connection setup messages to one person go out in order. If the server is briefly busy or
@@ -1563,7 +1797,7 @@
                 const analyser = this.audioContext.createAnalyser();
                 analyser.fftSize = 512;
                 source.connect(analyser);
-                const target = key === '__me' ? this : this.peers.get(key);
+                const target = key === '__me' ? this : (this.sfuAudios.get(key) || this.peers.get(key));
                 if (target) target.analyser = { source, analyser, data: new Uint8Array(analyser.fftSize) };
             } catch (e) { /* metering is optional */ }
         }
@@ -1571,7 +1805,7 @@
         /** Audio level reported by WebRTC itself for a remote speaker (0–1), or 0 if unknown/stale. */
         remoteLevel(peer) {
             let best = 0;
-            peer.pc.getReceivers().forEach((receiver) => {
+            (peer.receiver ? [peer.receiver] : peer.pc.getReceivers()).forEach((receiver) => {
                 if (!receiver.getSynchronizationSources) return;
                 receiver.getSynchronizationSources().forEach((source) => {
                     const fresh = source.timestamp == null || performance.now() - source.timestamp < 1000 || Date.now() - source.timestamp < 1000;
@@ -1586,7 +1820,7 @@
          * energy counters. Unlike a snapshot it also catches short sounds between checks.
          */
         async energyLevel(peer) {
-            const receiver = peer.pc.getReceivers()[0];
+            const receiver = peer.receiver || peer.pc.getReceivers()[0];
             if (peer.energyPending || !receiver || !receiver.getStats) return 0;
             peer.energyPending = true;
             try {
@@ -1639,7 +1873,8 @@
                 if (document.hidden && !this.pip && !this.watchedRecently()) return;
                 const me = this.state && this.state.me;
                 const now = Date.now();
-                this.peers.forEach((peer, key) => {
+                const audioPeers = this.transportMode === 'sfu' ? this.sfuAudios : this.peers;
+                audioPeers.forEach((peer, key) => {
                     if (!peer.audio || peer.audio.muted) return;
                     if (this.remoteLevel(peer) > 0.02 || (peer.analyser && rms(peer.analyser) > 0.04)) this.heardAt.set(key, now);
                     // Result lands before the next tick.
@@ -1658,7 +1893,7 @@
                 const hold = document.hidden ? 1600 : HOLD_MS;
                 const next = new Set();
                 this.heardAt.forEach((at, key) => {
-                    const peer = this.peers.get(key);
+                    const peer = (this.transportMode === 'sfu' ? this.sfuAudios : this.peers).get(key);
                     const audible = me && key === me.key ? !me.self_muted : Boolean(peer && peer.audio && !peer.audio.muted);
                     if (audible && now - at < hold) next.add(key);
                     else if (now - at >= hold) this.heardAt.delete(key);
@@ -1685,6 +1920,7 @@
                     // Back on the page: catch up now and resume audio if the browser paused it.
                     if (this.audioContext && this.audioContext.state === 'suspended') this.audioContext.resume().catch(() => {});
                     this.peers.forEach((peer) => { if (peer.audio && peer.audio.paused) this.play(peer.audio); });
+                    this.sfuAudios.forEach((peer) => { if (peer.audio && peer.audio.paused) this.play(peer.audio); });
                     this.scheduleSync(0);
                 }
             });
@@ -2062,10 +2298,23 @@
                     ' · ' + esc(via) + ' · ' + esc(types.length ? types.join(', ') : this.tr('diag_none_yet')) + ' · ↓' + kb(inBytes) + ' ↑' + kb(outBytes) +
                     ' · ' + esc(this.tr('diag_attempt', { n: peer.attempt })) + (peer.restarts ? ' +ice' : '') + (peer.initiator ? ' · offer' : ' · answer') + '</div>');
             }
+            if (this.transportMode === 'sfu') {
+                for (const [label, endpoint] of [['publish', this.sfuPublisher], ['receive', this.sfuReceiver]]) {
+                    if (!endpoint) { rows.push('<div class="car-diag-row">Cloudflare SFU · ' + label + ': not connected</div>'); continue; }
+                    let inBytes = 0, outBytes = 0;
+                    try {
+                        (await endpoint.pc.getStats()).forEach((stat) => {
+                            if (stat.type === 'inbound-rtp' && stat.kind === 'audio') inBytes += stat.bytesReceived || 0;
+                            if (stat.type === 'outbound-rtp' && stat.kind === 'audio') outBytes += stat.bytesSent || 0;
+                        });
+                    } catch (e) { /* stats unavailable */ }
+                    rows.push('<div class="car-diag-row">Cloudflare SFU · ' + label + ': ' + esc(endpoint.pc.connectionState) + ' · ↓' + kb(inBytes) + ' ↑' + kb(outBytes) + '</div>');
+                }
+            }
             const yes = this.tr('diag_yes'), no = this.tr('diag_no');
             body.innerHTML = '<div class="car-diag-row">' + esc(this.tr('diag_relay')) + ': <strong>' + esc(this.hasRelay() ? this.tr('diag_configured') : this.tr('diag_not_configured')) + '</strong>' +
                 ' · ' + esc(this.tr('diag_stun')) + ': ' + esc(stun ? yes : no) + ' · ' + esc(this.tr('diag_relay_used')) + ': ' + esc(relay ? yes : no) +
-                ' · policy ' + esc(this.iceTransportPolicy) + ' · rejoins ' + this.rejoins.length +
+                ' · mode ' + esc(this.transportMode) + ' / policy ' + esc(this.iceTransportPolicy) + ' · rejoins ' + this.rejoins.length +
                 (this.lastSyncMs ? ' · check-in ' + this.lastSyncMs + ' ms' : '') + '</div>' +
                 (rows.length ? rows.join('') : '<div class="car-diag-row">—</div>') +
                 '<div class="car-diag-row car-diag-ua">' + esc(navigator.userAgent) + '</div>';

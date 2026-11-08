@@ -9,6 +9,7 @@ use daacreators\CreatorsAudioRooms\Services\RoomAccess;
 use daacreators\CreatorsAudioRooms\Services\RoomManager;
 use daacreators\CreatorsAudioRooms\Services\RoomStatePresenter;
 use daacreators\CreatorsAudioRooms\Signaling\IceServers;
+use daacreators\CreatorsAudioRooms\Signaling\CloudflareSfu;
 use daacreators\CreatorsAudioRooms\Signaling\SessionToken;
 use daacreators\CreatorsAudioRooms\Signaling\SignalRelay;
 use daacreators\CreatorsAudioRooms\Signaling\SignalStore;
@@ -33,6 +34,7 @@ class RoomApiController extends Controller
         private readonly SignalStore $signals,
         private readonly SignalRelay $relay,
         private readonly IceServers $iceServers,
+        private readonly CloudflareSfu $sfu,
     ) {}
 
     /** Rooms the participant can see (the room list page refreshes from this). */
@@ -115,11 +117,24 @@ class RoomApiController extends Controller
         // id, so nobody else's audio link to them is rebuilt.
         $previous = SessionToken::decode($request->header(self::TOKEN_HEADER), allowExpired: true);
         $resume = $previous && $previous->roomId === $room->id && $previous->participantKey === $who->key ? $previous->connectionId : null;
+        $transportMode = config('creators-audio-rooms.transport_mode', 'webrtc');
+        if ($transportMode === 'sfu' && ! CloudflareSfu::configured()) {
+            return response()->json([
+                'error' => 'sfu_not_configured',
+                'message' => 'Cloudflare Realtime SFU is selected but not configured. An admin must add the SFU App ID and App Secret in Audio Rooms settings.',
+            ], 503);
+        }
         $joined = $this->rooms->join($who, $room, ($data['as'] ?? null) === 'monitor', $resume);
+        if ($resume === null || $resume !== $joined['member']->connection_id) {
+            $old = $joined['member'];
+            if ($old->sfu_publisher_session_id && $old->sfu_publisher_mid) {
+                try { $this->sfu->closeTrack($old->sfu_publisher_session_id, $old->sfu_publisher_mid); } catch (\Throwable $e) { report($e); }
+            }
+            $old->forceFill(['sfu_publisher_session_id' => null, 'sfu_publisher_mid' => null, 'sfu_publisher_ready' => false, 'sfu_receiver_session_id' => null])->save();
+        }
         $iceServers = $this->iceServers->forParticipant($who);
         // Relay-only needs a relay: if none came back (e.g. Cloudflare unreachable), connect directly instead of not at all.
         $hasRelay = collect($iceServers)->contains(fn ($s) => collect((array) ($s['urls'] ?? []))->contains(fn ($u) => preg_match('/^turns?:/i', (string) $u)));
-
         return response()->json([
             'session' => $joined['token']->encode(),
             'session_expires_at' => $joined['token']->expiresAt,
@@ -128,7 +143,8 @@ class RoomApiController extends Controller
             'cursor' => $this->signals->cursor($room->id, $who->key),
             'rejoined' => $joined['rejoined'],
             'ice_servers' => $iceServers,
-            'ice_transport_policy' => $hasRelay && config('creators-audio-rooms.ice_transport_policy', 'all') === 'relay' ? 'relay' : 'all',
+            'transport_mode' => in_array($transportMode, ['webrtc', 'turn', 'sfu'], true) ? $transportMode : 'webrtc',
+            'ice_transport_policy' => $hasRelay && ($transportMode === 'turn' || config('creators-audio-rooms.ice_transport_policy', 'all') === 'relay') ? 'relay' : 'all',
             'audio' => ['max_bitrate' => (int) config('creators-audio-rooms.audio.max_bitrate', 32000)],
             'intervals' => [
                 'active' => (int) config('creators-audio-rooms.signaling.sync_interval_ms'),
@@ -140,10 +156,166 @@ class RoomApiController extends Controller
         ]);
     }
 
+    /** Publish this participant's microphone to Cloudflare Realtime SFU. */
+    public function sfuPublish(Request $request, string $room): JsonResponse
+    {
+        abort_unless(config('creators-audio-rooms.transport_mode') === 'sfu', 404);
+        $data = $request->validate([
+            'session_description' => ['required', 'array'],
+            'session_description.type' => ['required', 'in:offer'],
+            'session_description.sdp' => ['required', 'string', 'max:200000'],
+            'mid' => ['required', 'string', 'max:16'],
+        ]);
+        $who = $this->who($request);
+        $roomModel = $this->viewable($who, $room);
+        [$member] = $this->rooms->memberForToken($who, $roomModel, $request->header(self::TOKEN_HEADER));
+        if (! $member->role->canSpeak() || $member->moderator_muted) {
+            throw RoomActionDenied::because('not_allowed');
+        }
+
+        $created = $this->sfu->createSession();
+        $sessionId = (string) ($created['sessionId'] ?? '');
+        if ($sessionId === '') {
+            throw new \RuntimeException('Cloudflare Realtime did not return a publishing session.');
+        }
+        $published = $this->sfu->publish($sessionId, $data['session_description'], $data['mid']);
+        $track = collect($published['tracks'] ?? [])->first(fn ($track) => is_array($track) && empty($track['errorCode']));
+        if (! is_array($track) || empty($published['sessionDescription']['sdp'])) {
+            throw new \RuntimeException('Cloudflare Realtime could not publish this microphone.');
+        }
+
+        $member->forceFill([
+            'sfu_publisher_session_id' => $sessionId,
+            'sfu_publisher_mid' => $data['mid'],
+            'sfu_publisher_ready' => false,
+        ])->save();
+
+        return response()->json([
+            'session_id' => $sessionId,
+            'session_description' => $published['sessionDescription'],
+        ]);
+    }
+
+    /** Make a publication discoverable only after its WebRTC connection is live. */
+    public function sfuPublisherReady(Request $request, string $room): JsonResponse
+    {
+        abort_unless(config('creators-audio-rooms.transport_mode') === 'sfu', 404);
+        $data = $request->validate(['session_id' => ['required', 'string', 'max:128']]);
+        $who = $this->who($request);
+        $roomModel = $this->viewable($who, $room);
+        [$member] = $this->rooms->memberForToken($who, $roomModel, $request->header(self::TOKEN_HEADER));
+        if (! $member->role->canSpeak() || $member->moderator_muted
+            || ! hash_equals((string) $member->sfu_publisher_session_id, $data['session_id'])) {
+            throw RoomActionDenied::because('not_allowed');
+        }
+        if (! $member->sfu_publisher_ready) {
+            $member->forceFill(['sfu_publisher_ready' => true])->save();
+            $roomModel->increment('version');
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /** Subscribe to the room's current, authorized speakers in one SFU receive session. */
+    public function sfuSubscribe(Request $request, string $room): JsonResponse
+    {
+        abort_unless(config('creators-audio-rooms.transport_mode') === 'sfu', 404);
+        $data = $request->validate(['publishers' => ['required', 'array', 'min:1', 'max:32'], 'publishers.*' => ['required', 'string', 'max:191']]);
+        $who = $this->who($request);
+        $roomModel = $this->viewable($who, $room);
+        [$member] = $this->rooms->memberForToken($who, $roomModel, $request->header(self::TOKEN_HEADER));
+        if ($member->role->value === 'monitor') {
+            throw RoomActionDenied::because('not_allowed');
+        }
+
+        $publishers = $roomModel->members()
+            ->whereIn('participant_key', array_values(array_unique($data['publishers'])))
+            ->where('state', 'joined')
+            ->whereIn('role', ['host', 'co_host', 'speaker'])
+            ->whereNotNull('sfu_publisher_session_id')
+            ->where('sfu_publisher_ready', true)
+            ->get();
+        $publishers = $publishers->reject(fn ($publisher) => $publisher->participant_key === $member->participant_key)->values();
+        if ($publishers->isEmpty()) {
+            return response()->json(['subscriptions' => [], 'session_description' => null]);
+        }
+
+        $created = $this->sfu->createSession();
+        $sessionId = (string) ($created['sessionId'] ?? '');
+        if ($sessionId === '') {
+            throw new \RuntimeException('Cloudflare Realtime did not return a receiving session.');
+        }
+        $publications = $publishers->map(fn ($publisher) => [
+            'sessionId' => $publisher->sfu_publisher_session_id,
+            'trackName' => 'audio',
+        ])->all();
+        $response = $this->sfu->subscribe($sessionId, $publications);
+        $subscriptions = [];
+        foreach ((array) ($response['tracks'] ?? []) as $index => $track) {
+            if (! is_array($track) || ! empty($track['errorCode']) || ! isset($publishers[$index], $track['mid'])) {
+                continue;
+            }
+            $subscriptions[] = ['mid' => (string) $track['mid'], 'key' => $publishers[$index]->participant_key];
+        }
+        if ($subscriptions === [] || empty($response['sessionDescription']['sdp'])) {
+            throw new \RuntimeException('Cloudflare Realtime could not subscribe to the room audio.');
+        }
+
+        $member->forceFill(['sfu_receiver_session_id' => $sessionId])->save();
+
+        return response()->json([
+            'session_id' => $sessionId,
+            'subscriptions' => $subscriptions,
+            'session_description' => $response['sessionDescription'],
+        ]);
+    }
+
+    /** Complete the SFU offer/answer exchange for this participant's receiving session. */
+    public function sfuRenegotiate(Request $request, string $room): JsonResponse
+    {
+        abort_unless(config('creators-audio-rooms.transport_mode') === 'sfu', 404);
+        $data = $request->validate([
+            'session_id' => ['required', 'string', 'max:128'],
+            'session_description' => ['required', 'array'],
+            'session_description.type' => ['required', 'in:answer'],
+            'session_description.sdp' => ['required', 'string', 'max:200000'],
+        ]);
+        $who = $this->who($request);
+        $roomModel = $this->viewable($who, $room);
+        [$member] = $this->rooms->memberForToken($who, $roomModel, $request->header(self::TOKEN_HEADER));
+        abort_unless(hash_equals((string) $member->sfu_receiver_session_id, $data['session_id']), 403);
+
+        return response()->json($this->sfu->renegotiate($data['session_id'], $data['session_description']));
+    }
+
+    /** Stop exposing a publisher when its speaker leaves or is demoted. */
+    public function sfuUnpublish(Request $request, string $room): JsonResponse
+    {
+        abort_unless(config('creators-audio-rooms.transport_mode') === 'sfu', 404);
+        $who = $this->who($request);
+        $roomModel = $this->viewable($who, $room);
+        [$member] = $this->rooms->memberForToken($who, $roomModel, $request->header(self::TOKEN_HEADER));
+        if ($member->sfu_publisher_session_id && $member->sfu_publisher_mid) {
+            try {
+                $this->sfu->closeTrack($member->sfu_publisher_session_id, $member->sfu_publisher_mid);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+            $member->forceFill(['sfu_publisher_session_id' => null, 'sfu_publisher_mid' => null, 'sfu_publisher_ready' => false])->save();
+            $roomModel->increment('version');
+        }
+        return response()->json(['ok' => true]);
+    }
+
     public function leave(Request $request, string $room): JsonResponse
     {
         $who = $this->who($request);
         $room = $this->viewable($who, $room);
+        if (config('creators-audio-rooms.transport_mode') === 'sfu') {
+            $this->sfuUnpublish($request, $room->id);
+            [$member] = $this->rooms->memberForToken($who, $room, $request->header(self::TOKEN_HEADER));
+            $member->forceFill(['sfu_receiver_session_id' => null])->save();
+        }
         $this->rooms->leave($who, $room);
 
         return response()->json(['ok' => true]);

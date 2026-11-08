@@ -1,6 +1,6 @@
 {
     "name": "daacreators/creators-audio-rooms",
-    "description": "Live audio rooms for Laravel: hosts, speakers and listeners with hand raising and moderation. Peer-to-peer WebRTC audio with signaling through your own app, so there is nothing extra to host.",
+    "description": "Live audio rooms for Laravel with peer-to-peer WebRTC, TURN relay, or Cloudflare Realtime SFU transport.",
     "keywords": [
         "laravel",
         "webrtc",

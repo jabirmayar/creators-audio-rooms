@@ -159,6 +159,18 @@ return [
         ],
     ],
 
+    /* Cloudflare Realtime SFU. The App Secret must remain server-side. */
+    'transport_mode' => env('AUDIO_ROOMS_TRANSPORT_MODE', 'webrtc'), // webrtc | turn | sfu
+    'sfu' => [
+        'provider' => env('AUDIO_ROOMS_SFU_PROVIDER', 'cloudflare'),
+        'cloudflare' => [
+            'app_id' => env('AUDIO_ROOMS_CLOUDFLARE_SFU_APP_ID'),
+            'app_secret' => env('AUDIO_ROOMS_CLOUDFLARE_SFU_APP_SECRET'),
+            'api_url' => 'https://rtc.live.cloudflare.com/v1',
+            'timeout_seconds' => 10,
+        ],
+    ],
+
     /*
     | 'all' lets browsers connect directly when they can and fall back to the
     | relay; 'relay' forces every connection through the TURN relay (hides

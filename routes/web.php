@@ -46,6 +46,11 @@ Route::middleware(array_merge((array) ($routes['middleware'] ?? ['web']), [Resol
                     Route::post('/mute', [RoomApiController::class, 'mute'])->name('mute');
                     Route::post('/invitation', [RoomApiController::class, 'invitation'])->name('invitation');
                     Route::post('/moderate', [RoomApiController::class, 'moderate'])->name('moderate');
+                    Route::post('/sfu/publish', [RoomApiController::class, 'sfuPublish'])->name('sfu.publish');
+                    Route::post('/sfu/ready', [RoomApiController::class, 'sfuPublisherReady'])->name('sfu.ready');
+                    Route::post('/sfu/subscribe', [RoomApiController::class, 'sfuSubscribe'])->name('sfu.subscribe');
+                    Route::post('/sfu/renegotiate', [RoomApiController::class, 'sfuRenegotiate'])->name('sfu.renegotiate');
+                    Route::post('/sfu/unpublish', [RoomApiController::class, 'sfuUnpublish'])->name('sfu.unpublish');
                 });
             });
         });

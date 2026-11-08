@@ -43,6 +43,7 @@ class Member extends Model
         'invited_to_speak_at' => 'datetime',
         'moderator_muted' => 'boolean',
         'self_muted' => 'boolean',
+        'sfu_publisher_ready' => 'boolean',
         'joined_at' => 'datetime',
         'last_seen_at' => 'datetime',
         'left_at' => 'datetime',
@@ -103,6 +104,12 @@ class Member extends Model
             'invited_role' => $this->invitedRole(),
             'moderator_muted' => $this->moderator_muted,
             'self_muted' => $this->self_muted,
+            'sfu_publisher' => config('creators-audio-rooms.transport_mode') === 'sfu'
+                && $this->state === MemberState::Joined
+                && $this->role->canSpeak()
+                && $this->sfu_publisher_ready
+                ? $this->sfu_publisher_session_id
+                : null,
         ];
     }
 }

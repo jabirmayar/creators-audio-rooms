@@ -119,6 +119,6 @@ class CreatorsAudioRoomsServiceProvider extends ServiceProvider
         // Prebuilt browser bundle: no build step needed in the host app.
         $this->publishes([
             __DIR__.'/../resources/dist' => public_path('vendor/'.self::NAME),
-        ], self::NAME.'-assets');
+        ], [self::NAME.'-assets', 'laravel-assets']);
     }
 }
