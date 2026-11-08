@@ -1003,45 +1003,71 @@
             const signature = publishers.map((member) => member.key + ':' + member.conn + ':' + member.sfu_publisher).sort().join('|');
             if (this.sfuReceiverStarting) { this.sfuReceiverWanted = signature; return; }
             if (this.sfuReceiver && this.sfuReceiverSignature === signature && !['failed', 'closed'].includes(this.sfuReceiver.pc.connectionState)) return;
-            if (this.sfuReceiverSignature !== signature) this.closeSfuReceiver();
+            const receiverPublishers = this.sfuReceiver && this.sfuReceiver.publishers instanceof Map ? this.sfuReceiver.publishers : new Map();
+            const receiverCanBeExtended = this.sfuReceiver && !['failed', 'closed'].includes(this.sfuReceiver.pc.connectionState)
+                && Array.from(receiverPublishers.entries()).every(([key, sessionId]) => {
+                    const member = publishers.find((item) => item.key === key);
+                    return member && member.sfu_publisher === sessionId;
+                });
+            if (this.sfuReceiverSignature !== signature && !receiverCanBeExtended) this.closeSfuReceiver();
             if (!publishers.length) return;
 
             this.sfuReceiverWanted = signature;
             this.sfuReceiverStarting = (async () => {
                 let pc = null;
                 try {
-                    const subscribe = await this.api.request('POST', '/sfu/subscribe', { publishers: publishers.map((member) => member.key) });
+                    const current = this.sfuReceiver;
+                    const currentPublishers = current && current.publishers instanceof Map ? current.publishers : new Map();
+                    const canAdd = current && !['failed', 'closed'].includes(current.pc.connectionState)
+                        && Array.from(currentPublishers.entries()).every(([key, sessionId]) => {
+                            const member = publishers.find((item) => item.key === key);
+                            return member && member.sfu_publisher === sessionId;
+                        });
+                    const additions = canAdd ? publishers.filter((member) => currentPublishers.get(member.key) !== member.sfu_publisher) : publishers;
+                    if (canAdd && !additions.length) {
+                        this.sfuReceiverSignature = signature;
+                        return;
+                    }
+                    const subscribe = await this.api.request('POST', '/sfu/subscribe', {
+                        publishers: additions.map((member) => member.key),
+                        ...(canAdd ? { session_id: current.sessionId } : {}),
+                    });
                     if (!subscribe.session_description || !subscribe.subscriptions || !subscribe.subscriptions.length) return;
-                    pc = new RTCPeerConnection({ iceServers: this.iceServers, bundlePolicy: 'max-bundle' });
-                    const receiver = { pc, sessionId: subscribe.session_id, byMid: new Map() };
+                    pc = canAdd ? current.pc : new RTCPeerConnection({ iceServers: this.iceServers, bundlePolicy: 'max-bundle' });
+                    const receiver = canAdd ? current : { pc, sessionId: subscribe.session_id, byMid: new Map(), publishers: new Map() };
                     subscribe.subscriptions.forEach((item) => receiver.byMid.set(String(item.mid), item.key));
-                    this.sfuReceiver = receiver;
-                    this.sfuReceiverSignature = signature;
-                    pc.addEventListener('track', (event) => {
-                        const key = receiver.byMid.get(String(event.transceiver.mid));
-                        if (key) this.onSfuRemoteTrack(key, event);
+                    subscribe.subscriptions.forEach((item) => {
+                        const member = additions.find((publisher) => publisher.key === item.key);
+                        if (member) receiver.publishers.set(item.key, member.sfu_publisher);
                     });
-                    let disconnectTimer = null;
-                    pc.addEventListener('connectionstatechange', () => {
-                        if (pc.connectionState === 'connected') {
-                            clearTimeout(disconnectTimer);
-                            this.render();
-                        }
-                        if (pc.connectionState === 'disconnected') {
-                            clearTimeout(disconnectTimer);
-                            disconnectTimer = setTimeout(() => {
-                                if (pc.connectionState === 'disconnected' && this.sfuReceiver === receiver) {
-                                    this.closeSfuReceiver();
-                                    setTimeout(() => this.reconcileSfu(), 1200);
-                                }
-                            }, 6000);
-                        }
-                        if (pc.connectionState === 'failed' && this.sfuReceiver === receiver) {
-                            clearTimeout(disconnectTimer);
-                            this.closeSfuReceiver();
-                            setTimeout(() => this.reconcileSfu(), 1200);
-                        }
-                    });
+                    if (!canAdd) {
+                        this.sfuReceiver = receiver;
+                        pc.addEventListener('track', (event) => {
+                            const key = receiver.byMid.get(String(event.transceiver.mid));
+                            if (key) this.onSfuRemoteTrack(key, event);
+                        });
+                        let disconnectTimer = null;
+                        pc.addEventListener('connectionstatechange', () => {
+                            if (pc.connectionState === 'connected') {
+                                clearTimeout(disconnectTimer);
+                                this.render();
+                            }
+                            if (pc.connectionState === 'disconnected') {
+                                clearTimeout(disconnectTimer);
+                                disconnectTimer = setTimeout(() => {
+                                    if (pc.connectionState === 'disconnected' && this.sfuReceiver === receiver) {
+                                        this.closeSfuReceiver();
+                                        setTimeout(() => this.reconcileSfu(), 1200);
+                                    }
+                                }, 6000);
+                            }
+                            if (pc.connectionState === 'failed' && this.sfuReceiver === receiver) {
+                                clearTimeout(disconnectTimer);
+                                this.closeSfuReceiver();
+                                setTimeout(() => this.reconcileSfu(), 1200);
+                            }
+                        });
+                    }
                     await pc.setRemoteDescription(subscribe.session_description);
                     const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
@@ -1050,14 +1076,19 @@
                         session_id: subscribe.session_id,
                         session_description: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
                     });
-                    if (this.sfuReceiverWanted !== signature) this.reconcileSfu();
+                    this.sfuReceiver = receiver;
+                    this.sfuReceiverSignature = signature;
+                    this.render();
                 } catch (e) {
                     if (this.sfuReceiver && this.sfuReceiver.pc === pc) this.closeSfuReceiver();
                     else if (pc) try { pc.close(); } catch (ignore) { /* already closed */ }
                     this.notice = { kind: 'error', text: (e && e.message) || this.tr('error_generic') };
                     this.render();
                 }
-            })().finally(() => { this.sfuReceiverStarting = null; });
+            })().finally(() => {
+                this.sfuReceiverStarting = null;
+                if (this.sfuReceiverWanted !== signature) this.reconcileSfu();
+            });
         }
 
         /**
@@ -1330,7 +1361,9 @@
             if (!ROLE_SPEAKS[me.role] && !ROLE_SPEAKS[m.role]) return null;
             if (this.transportMode === 'sfu') {
                 if (!m.sfu_publisher) return 'linking';
-                return this.sfuReceiver && this.sfuReceiver.pc.connectionState === 'connected' ? 'ok' : 'linking';
+                return this.sfuReceiver && this.sfuReceiver.pc.connectionState === 'connected'
+                    && this.sfuReceiver.publishers && this.sfuReceiver.publishers.get(m.key) === m.sfu_publisher
+                    && this.sfuAudios.has(m.key) ? 'ok' : 'linking';
             }
             const peer = this.peers.get(m.key);
             if (peer) return peer.failed ? 'failed' : (linkState(peer.pc) === 'connected' ? 'ok' : 'linking');
@@ -1375,6 +1408,7 @@
             this.applyRemoteMute(key, member);
             this.play(peer.audio);
             this.meterStream(key, stream);
+            this.render();
         }
 
         /** Receiver-side enforcement: never play someone who is not allowed to speak. */

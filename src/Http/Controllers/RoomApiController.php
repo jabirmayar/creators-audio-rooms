@@ -239,7 +239,11 @@ class RoomApiController extends Controller
     public function sfuSubscribe(Request $request, string $room): JsonResponse
     {
         abort_unless(config('creators-audio-rooms.transport_mode') === 'sfu', 404);
-        $data = $request->validate(['publishers' => ['required', 'array', 'min:1', 'max:32'], 'publishers.*' => ['required', 'string', 'max:191']]);
+        $data = $request->validate([
+            'publishers' => ['required', 'array', 'min:1', 'max:32'],
+            'publishers.*' => ['required', 'string', 'max:191'],
+            'session_id' => ['nullable', 'string', 'max:128'],
+        ]);
         $who = $this->who($request);
         $roomModel = $this->viewable($who, $room);
         [$member] = $this->rooms->memberForToken($who, $roomModel, $request->header(self::TOKEN_HEADER));
@@ -255,14 +259,23 @@ class RoomApiController extends Controller
             ->where('sfu_publisher_ready', true)
             ->get();
         $publishers = $publishers->reject(fn ($publisher) => $publisher->participant_key === $member->participant_key)->values();
-        if ($publishers->isEmpty()) {
-            return response()->json(['subscriptions' => [], 'session_description' => null]);
+        $sessionId = (string) ($data['session_id'] ?? '');
+        if ($sessionId !== '') {
+            if (! $member->sfu_receiver_session_id || ! hash_equals((string) $member->sfu_receiver_session_id, $sessionId)) {
+                throw RoomActionDenied::because('not_allowed');
+            }
+        } else {
+            if ($publishers->isEmpty()) {
+                return response()->json(['subscriptions' => [], 'session_description' => null]);
+            }
+            $created = $this->sfu->createSession();
+            $sessionId = (string) ($created['sessionId'] ?? '');
+            if ($sessionId === '') {
+                throw new \RuntimeException('Cloudflare Realtime did not return a receiving session.');
+            }
         }
-
-        $created = $this->sfu->createSession();
-        $sessionId = (string) ($created['sessionId'] ?? '');
-        if ($sessionId === '') {
-            throw new \RuntimeException('Cloudflare Realtime did not return a receiving session.');
+        if ($publishers->isEmpty()) {
+            return response()->json(['session_id' => $sessionId, 'subscriptions' => [], 'session_description' => null]);
         }
         $publications = $publishers->map(fn ($publisher) => [
             'sessionId' => $publisher->sfu_publisher_session_id,
