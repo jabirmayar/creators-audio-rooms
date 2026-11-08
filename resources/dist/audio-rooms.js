@@ -1023,7 +1023,10 @@
                     });
                     let disconnectTimer = null;
                     pc.addEventListener('connectionstatechange', () => {
-                        if (pc.connectionState === 'connected') clearTimeout(disconnectTimer);
+                        if (pc.connectionState === 'connected') {
+                            clearTimeout(disconnectTimer);
+                            this.render();
+                        }
                         if (pc.connectionState === 'disconnected') {
                             clearTimeout(disconnectTimer);
                             disconnectTimer = setTimeout(() => {
