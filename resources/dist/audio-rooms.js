@@ -55,6 +55,11 @@
     let instances = 0;
     /** A reload within this time goes back into the room the tab was in. */
     const RESUME_WINDOW_MS = 10 * 60 * 1000;
+    /** SFU links: how long a "disconnected" link may stay so before it is rebuilt (network switches recover within this). */
+    const SFU_DISCONNECT_GRACE_MS = 3000;
+    /** SFU links: pause before each rebuild, doubling while links keep dropping, up to the cap. */
+    const SFU_REBUILD_BASE_MS = 250;
+    const SFU_REBUILD_MAX_MS = 8000;
 
     /** Stable soft colour for people without a photo (six hues). */
     function hue(key) {
@@ -173,7 +178,7 @@
             this.cursor = 0;
             this.version = -1;
             this.iceServers = [];
-            this.intervals = { active: 1200, idle: 2500, hidden: 5000, linking: 300 };
+            this.intervals = { active: 1200, idle: 2500, hidden: 5000, linking: 300, sfu: 2500 };
             this.lastActivity = 0;
             this.syncTimer = null;
             this.syncing = false;
@@ -468,6 +473,11 @@
             if (document.hidden && !this.pip && !this.watchedRecently()) return this.intervals.hidden;
             // Shown only in a bar on another tab: the relaxed pace is enough (the room ending shows within seconds).
             if (document.hidden && !this.pip) return this.intervals.idle;
+            // Through the SFU no offers or candidates travel over check-ins (publishing and subscribing talk to
+            // Cloudflare directly), so there is nothing to hurry for: one flat pace keeps the room state fresh
+            // without the quick peer-to-peer rhythm, which would cost every listener a request every few
+            // hundred milliseconds for nothing.
+            if (this.transportMode === 'sfu') return this.intervals.sfu || this.intervals.idle;
             const recent = Date.now() - this.lastActivity < 10000;
             const peers = Array.from(this.peers.values());
             // Setting up a link exchanges several messages through the server. Check in quickly while a link is
@@ -904,24 +914,29 @@
             if (this.sfuPublisherStarting || this.sfuPublisher || !this.joined) return this.sfuPublisherStarting;
             this.sfuPublisherStarting = (async () => {
                 const pc = new RTCPeerConnection({ iceServers: this.iceServers, bundlePolicy: 'max-bundle' });
-                const transceiver = pc.addTransceiver(track, { direction: 'sendonly' });
+                // The same upload cap as direct links, so a phone on a weak uplink is not asked for more than speech needs.
+                const init = { direction: 'sendonly' };
+                if (this.maxBitrate) init.sendEncodings = [{ maxBitrate: this.maxBitrate }];
+                let transceiver;
+                try { transceiver = pc.addTransceiver(track, init); } catch (e) { delete init.sendEncodings; transceiver = pc.addTransceiver(track, init); }
                 const publisher = { pc, sender: transceiver.sender, mid: null, sessionId: null, ready: false, disconnectTimer: null };
                 this.sfuPublisher = publisher;
+                // A dropped link is rebuilt soon: a short grace for the blips a network switch causes, then a fresh
+                // session. Repeated drops back off (sfuRebuildDelay) so a dead network is not hammered.
+                const rebuild = () => {
+                    if (this.sfuPublisher !== publisher) return;
+                    this.closeSfuPublisher(true);
+                    setTimeout(() => this.attachLocalTrack(), this.sfuRebuildDelay());
+                };
                 pc.addEventListener('connectionstatechange', () => {
-                    if (pc.connectionState === 'connected') clearTimeout(publisher.disconnectTimer);
+                    if (pc.connectionState === 'connected') { clearTimeout(publisher.disconnectTimer); this.sfuRebuilds = 0; }
                     if (publisher.ready && pc.connectionState === 'disconnected') {
                         clearTimeout(publisher.disconnectTimer);
-                        publisher.disconnectTimer = setTimeout(() => {
-                            if (pc.connectionState === 'disconnected' && this.sfuPublisher === publisher) {
-                                this.closeSfuPublisher(true);
-                                setTimeout(() => this.attachLocalTrack(), 1200);
-                            }
-                        }, 6000);
+                        publisher.disconnectTimer = setTimeout(() => { if (pc.connectionState === 'disconnected') rebuild(); }, SFU_DISCONNECT_GRACE_MS);
                     }
-                    if (publisher.ready && pc.connectionState === 'failed' && this.sfuPublisher === publisher) {
+                    if (publisher.ready && pc.connectionState === 'failed') {
                         clearTimeout(publisher.disconnectTimer);
-                        this.closeSfuPublisher(true);
-                        setTimeout(() => this.attachLocalTrack(), 1200);
+                        rebuild();
                     }
                 });
                 try {
@@ -945,10 +960,11 @@
                     publisher.ready = true;
                     this.sfuPublisherRetryAt = 0;
                     this.sfuPublisherRetryDelay = 1500;
+                    this.applyBitrate(publisher);
                     if (!this.sendingTrack()) await publisher.sender.replaceTrack(null).catch(() => {});
                     if (pc.connectionState === 'failed') {
                         this.closeSfuPublisher(true);
-                        setTimeout(() => this.attachLocalTrack(), 1200);
+                        setTimeout(() => this.attachLocalTrack(), this.sfuRebuildDelay());
                         return;
                     }
                     this.reconcileSfu();
@@ -963,6 +979,15 @@
                 }
             })().finally(() => { this.sfuPublisherStarting = null; });
             return this.sfuPublisherStarting;
+        }
+
+        /**
+         * Pause before rebuilding a dropped SFU link: short the first time, doubling to a cap while links keep
+         * dropping. Reset whenever a link connects or the network comes back.
+         */
+        sfuRebuildDelay() {
+            const n = this.sfuRebuilds = (this.sfuRebuilds || 0) + 1;
+            return Math.min(SFU_REBUILD_MAX_MS, SFU_REBUILD_BASE_MS * Math.pow(2, n - 1));
         }
 
         closeSfuPublisher(unpublish) {
@@ -1047,24 +1072,24 @@
                             if (key) this.onSfuRemoteTrack(key, event);
                         });
                         let disconnectTimer = null;
+                        const rebuild = () => {
+                            if (this.sfuReceiver !== receiver) return;
+                            this.closeSfuReceiver();
+                            setTimeout(() => this.reconcileSfu(), this.sfuRebuildDelay());
+                        };
                         pc.addEventListener('connectionstatechange', () => {
                             if (pc.connectionState === 'connected') {
                                 clearTimeout(disconnectTimer);
+                                this.sfuRebuilds = 0;
                                 this.render();
                             }
                             if (pc.connectionState === 'disconnected') {
                                 clearTimeout(disconnectTimer);
-                                disconnectTimer = setTimeout(() => {
-                                    if (pc.connectionState === 'disconnected' && this.sfuReceiver === receiver) {
-                                        this.closeSfuReceiver();
-                                        setTimeout(() => this.reconcileSfu(), 1200);
-                                    }
-                                }, 6000);
+                                disconnectTimer = setTimeout(() => { if (pc.connectionState === 'disconnected') rebuild(); }, SFU_DISCONNECT_GRACE_MS);
                             }
-                            if (pc.connectionState === 'failed' && this.sfuReceiver === receiver) {
+                            if (pc.connectionState === 'failed') {
                                 clearTimeout(disconnectTimer);
-                                this.closeSfuReceiver();
-                                setTimeout(() => this.reconcileSfu(), 1200);
+                                rebuild();
                             }
                         });
                     }
@@ -1968,7 +1993,22 @@
                     this.scheduleSync(0);
                 }
             });
-            window.addEventListener('online', () => { if (this.joined) this.scheduleSync(0); });
+            window.addEventListener('online', () => {
+                if (!this.joined) return;
+                this.scheduleSync(0);
+                // Back on a network: rebuild dropped SFU links now rather than waiting for them to time out.
+                if (this.transportMode === 'sfu') {
+                    this.sfuRebuilds = 0;
+                    if (this.sfuPublisher && ['disconnected', 'failed'].includes(this.sfuPublisher.pc.connectionState)) {
+                        this.closeSfuPublisher(true);
+                        setTimeout(() => this.attachLocalTrack(), 300);
+                    }
+                    if (this.sfuReceiver && ['disconnected', 'failed'].includes(this.sfuReceiver.pc.connectionState)) {
+                        this.closeSfuReceiver();
+                        setTimeout(() => this.reconcileSfu(), 300);
+                    }
+                }
+            });
             window.addEventListener('offline', () => { if (this.joined) this.setStatus('offline'); });
             window.addEventListener('pagehide', (e) => {
                 if (this.joined && !e.persisted) {

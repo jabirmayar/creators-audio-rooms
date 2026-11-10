@@ -2,7 +2,15 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 1.13.0 - 2026-11-10
+
+### Changed
+
+- SFU transport: pages check in at one flat pace (`signaling.sync_interval_sfu_ms`, default 2500 ms) instead of the peer-to-peer rhythm. Offers and candidates never travel over check-ins in SFU mode, so the 300 ms linking pace and the speakers' 1.2 s pace only cost the server requests; a room of thirty now makes a few requests a second instead of dozens.
+- SFU transport: the speaker's upload is capped like direct links (`audio.max_bitrate`, 32 kbps by default), so phones on weak uplinks send only what speech needs.
+- SFU transport: dropped links come back sooner. A link that stays "disconnected" is rebuilt after 3 s (was 6 s) and a failed one at once, with a pause that doubles up to 8 s while links keep dropping; when the browser reports the network is back, dropped links are rebuilt straight away.
+
+## 1.12.10 - 2026-11-10
 
 ### Changed
 

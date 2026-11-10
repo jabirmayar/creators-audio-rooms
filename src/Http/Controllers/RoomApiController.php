@@ -164,6 +164,7 @@ class RoomApiController extends Controller
                 'idle' => (int) config('creators-audio-rooms.signaling.sync_interval_idle_ms'),
                 'hidden' => (int) config('creators-audio-rooms.signaling.sync_interval_hidden_ms'),
                 'linking' => (int) config('creators-audio-rooms.signaling.sync_interval_linking_ms', 300),
+                'sfu' => (int) config('creators-audio-rooms.signaling.sync_interval_sfu_ms', 2500),
             ],
             'state' => $this->presenter->forViewer($room->fresh(), $who),
         ]);

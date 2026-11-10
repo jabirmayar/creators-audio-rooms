@@ -237,6 +237,7 @@ Middleware for these requests can be added with `routes.signaling_middleware` (e
 - Use **Redis or Memcached** as the cache (`signaling.cache_store`); the `database` and `file` stores work but add load.
 - Run PHP with enough workers for the expected number of concurrent participants (PHP-FPM, Octane or FrankenPHP).
 - Tune `signaling.sync_interval_*` and `rate_limits` together if you change the timings.
+- In SFU mode every page checks in at `signaling.sync_interval_sfu_ms` (2500 ms by default); the quicker peer-to-peer paces do not apply.
 
 ## Integrating with your app
 

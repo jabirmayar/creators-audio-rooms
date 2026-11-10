@@ -113,6 +113,8 @@ return [
         'sync_interval_hidden_ms' => 5000,
         // While a link to someone is being set up (a few seconds at most), so its messages do not each wait a full interval.
         'sync_interval_linking_ms' => 300,
+        // SFU transport: one flat pace for everyone (no offers or candidates travel over check-ins there).
+        'sync_interval_sfu_ms' => 2500,
         'message_ttl_seconds' => 60,
         'max_messages_per_sync' => 50,
         // Signed session tokens for the sync/signal endpoints.
