@@ -256,6 +256,7 @@ a.car-person-name:hover { text-decoration: underline; }
 .car-menu--flip { left: auto; right: 0; inset-inline-start: auto; inset-inline-end: 0; }
 .car-menu--up { top: auto; bottom: calc(100% + 4px); }
 .car-menu-title { font-size: .74rem; color: var(--car-muted); padding: 6px 10px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.car-menu-details { font-size: .76rem; color: var(--car-text); padding: 0 10px 8px; margin-bottom: 4px; border-bottom: 1px solid var(--car-border); max-width: 260px; white-space: normal; line-height: 1.35; }
 .car-menu button, .car-menu a { display: block; width: 100%; text-align: start; border: 0; background: transparent; padding: 9px 10px; border-radius: 8px; font-size: .86rem; cursor: pointer; color: var(--car-text); text-decoration: none; }
 .car-menu button:hover, .car-menu a:hover { background: var(--car-surface); }
 .car-menu button:focus-visible, .car-menu a:focus-visible { background: var(--car-surface); }
@@ -307,7 +308,17 @@ a.car-person-name:hover { text-decoration: underline; }
 .car-create { position: relative; }
 .car-create > summary { list-style: none; }
 .car-create > summary::-webkit-details-marker { display: none; }
-.car-create-form { position: absolute; z-index: 20; right: 0; inset-inline-end: 0; top: calc(100% + 8px); width: 420px; max-width: calc(100vw - 32px); width: min(420px, calc(100vw - 32px)); box-shadow: var(--car-shadow); overflow-y: auto; overscroll-behavior: contain; max-height: min(60vh, 560px); }
+/* "Start a room" is a dialog: a dimmed page behind it, a body that scrolls and a footer whose Go live button never leaves the screen. */
+.car-create[open]::before { content: ""; position: fixed; inset: 0; z-index: 60; background: rgba(15, 23, 42, .45); }
+.car-create .car-create-form { position: fixed; z-index: 61; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(520px, calc(100vw - 24px)); max-height: min(88vh, 720px); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 0; padding: 0; overflow: hidden; box-shadow: var(--car-shadow); }
+.car-create-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--car-border); }
+.car-create-head h2 { margin: 0; font-size: 1rem; font-weight: 700; }
+.car-create-close { width: 32px; height: 32px; padding: 0; font-size: 1.1rem; line-height: 1; }
+.car-create-body { display: grid; gap: 10px; padding: 16px; overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+.car-create-body .car-audience-list { max-height: none; }
+.car-create-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--car-border); background: var(--car-bg); }
+.car-audience-remote { display: grid; gap: 8px; }
+.car-audience-remote .car-check span small { display: block; font-weight: 400; color: var(--car-muted); font-size: .74rem; }
 
 .car-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 14px; }
 .car-card { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border: 1px solid var(--car-border); border-radius: var(--car-radius); background: var(--car-bg); box-shadow: var(--car-card-shadow); transition: border-color .15s ease, box-shadow .15s ease; }
@@ -407,7 +418,9 @@ a.car-person-name:hover { text-decoration: underline; }
 @media (max-width: 640px) {
     .car-create { width: 100%; }
     .car-create > summary { width: 100%; }
-    .car-create-form { position: static; width: 100%; max-width: none; margin-top: 10px; box-shadow: none; max-height: none; overflow: visible; }
+    /* Phones: a bottom sheet that uses the whole width, footer buttons stretched for thumbs. */
+    .car-create .car-create-form { left: 0; right: 0; top: auto; bottom: 0; transform: none; width: 100%; max-height: 92vh; border-radius: 16px 16px 0 0; }
+    .car-create-foot .car-btn { flex: 1; justify-content: center; }
 }
 
 @media (max-width: 560px) {

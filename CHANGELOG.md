@@ -6,6 +6,8 @@ All notable changes to this package are documented here. The format follows [Kee
 
 ### Added
 
+- "Start a room" is now a dialog with a header, a scrolling body and a footer, so the Go live button is always on screen; on phones it is a bottom sheet. It closes from Close, Cancel, Escape or a tap outside.
+- Searchable audiences: an audience resolver may also implement `SearchesAudienceOptions` (`searchOptions`, `optionFor`). The start-room form then shows a search box; `GET /api/audiences?q=` returns matches and a chosen key that is not among the listed options is accepted when `optionFor()` vouches for it. Lets hosts pick single people out of thousands.
 - Participant details: each guard may name a `details_attribute` (an attribute or accessor on the user model) holding a short line about the person, e.g. "Grade 6" or "Teacher". It is saved on the member when they join and shown under their name, but only to viewers whose participant type is listed in `details_visible_to_types` (default `['staff']`), whatever their role in the room. A student made host or co-host never receives it. Migration adds `details` to the members table.
 
 ## 1.14.1 - 2026-11-12

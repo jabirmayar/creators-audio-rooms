@@ -6,6 +6,7 @@ use daacreators\CreatorsAudioRooms\Contracts\AudienceResolver;
 use daacreators\CreatorsAudioRooms\Contracts\Authorizer;
 use daacreators\CreatorsAudioRooms\Contracts\ParticipantResolver;
 use daacreators\CreatorsAudioRooms\Contracts\ProvidesAudienceOptions;
+use daacreators\CreatorsAudioRooms\Contracts\SearchesAudienceOptions;
 use daacreators\CreatorsAudioRooms\Enums\MemberState;
 use daacreators\CreatorsAudioRooms\Enums\RoomAction;
 use daacreators\CreatorsAudioRooms\Enums\RoomRole;
@@ -132,7 +133,23 @@ class RoomStatePresenter
             'enabled' => true,
             'everyone' => $this->audience->allowsEveryone($host),
             'options' => array_map(fn ($o) => $o->toArray(), $this->audience->optionsFor($host)),
+            // The form shows a search box when the app can look audiences up (GET /api/audiences?q=).
+            'search' => $this->audience instanceof SearchesAudienceOptions,
         ];
+    }
+
+    /**
+     * Audience options matching a search, as the picker shows them.
+     *
+     * @return list<array{key: string, type: string, ref: string, label: string, group: ?string}>
+     */
+    public function searchAudiences(ParticipantIdentity $host, string $query): array
+    {
+        if (! $this->audience instanceof SearchesAudienceOptions) {
+            return [];
+        }
+
+        return array_map(fn ($o) => $o->toArray(), $this->audience->searchOptions($host, mb_substr($query, 0, 80), 20));
     }
 
     /**

@@ -6,6 +6,7 @@ use daacreators\CreatorsAudioRooms\Contracts\AudienceResolver;
 use daacreators\CreatorsAudioRooms\Contracts\Notifier;
 use daacreators\CreatorsAudioRooms\Contracts\ParticipantResolver;
 use daacreators\CreatorsAudioRooms\Contracts\ProvidesAudienceOptions;
+use daacreators\CreatorsAudioRooms\Contracts\SearchesAudienceOptions;
 use daacreators\CreatorsAudioRooms\Contracts\TenantResolver;
 use daacreators\CreatorsAudioRooms\Enums\MemberState;
 use daacreators\CreatorsAudioRooms\Enums\RoomAction;
@@ -126,10 +127,15 @@ class RoomManager
 
         $chosen = [];
         foreach ($keys as $key) {
-            if (! isset($offered[$key])) {
+            $option = $offered[$key] ?? null;
+            // Searched audiences (e.g. one student) are not in the listed options; the app vouches for them.
+            if ($option === null && $this->audiences instanceof SearchesAudienceOptions) {
+                $option = $this->audiences->optionFor($host, $key);
+            }
+            if ($option === null) {
                 throw RoomActionDenied::because('invalid_audience', 422);
             }
-            $chosen[] = $offered[$key];
+            $chosen[] = $option;
         }
         if ($chosen === [] && ! $this->audiences->allowsEveryone($host)) {
             throw RoomActionDenied::because('audience_required', 422);

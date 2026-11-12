@@ -54,7 +54,13 @@ class RoomApiController extends Controller
     /** What the signed-in host may start a room for (drives the "Who can join" picker). */
     public function audiences(Request $request): JsonResponse
     {
-        return response()->json($this->presenter->audienceChoices($this->who($request)));
+        $who = $this->who($request);
+        $query = trim((string) $request->query('q', ''));
+        if ($query !== '') {
+            return response()->json(['options' => $this->presenter->searchAudiences($who, $query)]);
+        }
+
+        return response()->json($this->presenter->audienceChoices($who));
     }
 
     public function store(Request $request): JsonResponse

@@ -2619,7 +2619,9 @@
             items.push('<div class="car-menu-sep" role="separator"></div>');
             items.push(btn('remove', 'is-danger'));
             items.push(btn('ban', 'is-danger'));
-            return '<div class="car-menu" role="menu" aria-label="' + esc(this.tr('actions_for', { name: m.name })) + '"><div class="car-menu-title" aria-hidden="true">' + esc(m.name) + '</div>' + items.join('') + '</div>';
+            // The card truncates the details line; the menu shows it in full (only viewers the app allows receive it).
+            const details = m.details ? '<div class="car-menu-details">' + esc(m.details) + '</div>' : '';
+            return '<div class="car-menu" role="menu" aria-label="' + esc(this.tr('actions_for', { name: m.name })) + '"><div class="car-menu-title" aria-hidden="true">' + esc(m.name) + '</div>' + details + items.join('') + '</div>';
         }
 
         renderControls() {
@@ -2712,34 +2714,102 @@
         if (search) {
             search.addEventListener('input', () => {
                 const q = search.value.trim().toLowerCase();
-                picker.querySelectorAll('[data-audience-item]').forEach((item) => { item.hidden = q !== '' && item.getAttribute('data-search').indexOf(q) === -1; });
-                picker.querySelectorAll('[data-audience-group]').forEach((group) => { group.hidden = !group.querySelector('[data-audience-item]:not([hidden])'); });
+                picker.querySelectorAll('[data-audience-item]:not([data-remote-item])').forEach((item) => { item.hidden = q !== '' && item.getAttribute('data-search').indexOf(q) === -1; });
+                picker.querySelectorAll('[data-audience-list] [data-audience-group]').forEach((group) => { group.hidden = !group.querySelector('[data-audience-item]:not([hidden])'); });
             });
         }
+        mountRemoteAudienceSearch(picker, update);
         update();
+    }
+
+    /**
+     * People looked up on the server as the host types (audiences too large to list, e.g. every
+     * student). A match that is ticked moves to "Chosen people" so it stays while the search changes.
+     */
+    function mountRemoteAudienceSearch(picker, update) {
+        const remote = picker.querySelector('[data-audience-remote]');
+        if (!remote) return;
+        const input = remote.querySelector('[data-audience-remote-input]');
+        const results = remote.querySelector('[data-audience-remote-results]');
+        const resultsList = remote.querySelector('[data-audience-remote-results-list]');
+        const status = remote.querySelector('[data-audience-remote-status]');
+        const picked = remote.querySelector('[data-audience-remote-picked]');
+        const pickedList = remote.querySelector('[data-audience-remote-picked-list]');
+        const api = new Api(remote.getAttribute('data-audience-remote'), null);
+        let timer = null;
+        let seq = 0;
+
+        const item = (o, checked) => '<label class="car-check" data-audience-item data-remote-item data-search="">' +
+            '<input type="checkbox" name="audiences[]" value="' + esc(o.key) + '"' + (checked ? ' checked' : '') + '>' +
+            '<span>' + esc(o.label) + (o.group ? '<small>' + esc(o.group) + '</small>' : '') + '</span></label>';
+
+        input.addEventListener('input', () => {
+            clearTimeout(timer);
+            const q = input.value.trim();
+            if (q.length < 2) {
+                results.hidden = true;
+                status.textContent = q.length ? remote.getAttribute('data-label-hint') : '';
+                return;
+            }
+            timer = setTimeout(async () => {
+                const mine = ++seq;
+                results.hidden = false;
+                status.textContent = remote.getAttribute('data-label-searching');
+                try {
+                    const data = await api.request('GET', '?q=' + encodeURIComponent(q), undefined, { retry: false });
+                    if (mine !== seq) return;
+                    const chosen = new Set(Array.from(pickedList.querySelectorAll('input')).map((b) => b.value));
+                    const options = (data.options || []).filter((o) => !chosen.has(o.key));
+                    resultsList.innerHTML = options.map((o) => item(o, false)).join('');
+                    status.textContent = options.length ? '' : remote.getAttribute('data-label-no-results');
+                } catch (e) {
+                    if (mine === seq) status.textContent = e.message || remote.getAttribute('data-label-no-results');
+                }
+            }, 300);
+        });
+
+        remote.addEventListener('change', (e) => {
+            const box = e.target;
+            if (!box.matches || !box.matches('input[name="audiences[]"]')) return;
+            const row = box.closest('[data-remote-item]');
+            if (!row) return;
+            if (box.checked && resultsList.contains(row)) {
+                pickedList.appendChild(row);
+                picked.hidden = false;
+            } else if (!box.checked && pickedList.contains(row)) {
+                row.remove();
+                picked.hidden = pickedList.children.length === 0;
+            }
+            update();
+        });
     }
 
     function mountCreateForm(form) {
         mountAudiencePicker(form);
-        // The "Start a room" panel closes on an outside click or Escape, like a menu.
+        // "Start a room" is a dialog: it closes from its Close and Cancel buttons, Escape, or a tap on the
+        // dimmed page behind it; while open the page behind does not scroll and the title field has focus.
         const panel = form.closest('details');
         if (panel) {
-            document.addEventListener('click', (e) => {
-                if (panel.open && e.target.isConnected && !panel.contains(e.target)) panel.open = false;
-            });
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape' && panel.open) { panel.open = false; panel.querySelector('summary').focus({ preventScroll: true }); }
-            });
-            // As a popover, keep it inside the window (scrolling within itself), so opening it never adds a
-            // page scrollbar that would shift the whole page sideways.
-            const fit = () => {
-                form.style.maxHeight = '';
-                if (!panel.open || window.getComputedStyle(form).position !== 'absolute') return;
-                const room = window.innerHeight - form.getBoundingClientRect().top - 16;
-                form.style.maxHeight = Math.max(220, Math.floor(room)) + 'px';
+            const close = () => {
+                panel.open = false;
+                const summary = panel.querySelector('summary');
+                if (summary) summary.focus({ preventScroll: true });
             };
-            panel.addEventListener('toggle', fit);
-            window.addEventListener('resize', fit);
+            panel.addEventListener('click', (e) => {
+                // The backdrop is the <details> element's own pseudo-element: a click there targets <details>.
+                if (e.target === panel) close();
+            });
+            form.querySelectorAll('[data-create-close]').forEach((button) => button.addEventListener('click', close));
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && panel.open) close();
+            });
+            panel.addEventListener('toggle', () => {
+                document.body.style.overflow = panel.open ? 'hidden' : '';
+                if (panel.open) {
+                    const title = form.elements.title;
+                    if (title) setTimeout(() => title.focus({ preventScroll: true }), 30);
+                }
+            });
         }
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
