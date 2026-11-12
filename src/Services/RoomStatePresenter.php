@@ -28,23 +28,37 @@ class RoomStatePresenter
         private readonly Authorizer $authorizer,
     ) {}
 
-    /** @return array<string, mixed> */
-    public function summary(Room $room): array
+    /**
+     * Who a room is for is shown to its host, co-hosts and creator only. A room opened for one
+     * chosen person or a small group would otherwise name them to everyone who can see the list.
+     *
+     * @return array<string, mixed>
+     */
+    public function summary(Room $room, bool $revealAudience = false): array
     {
-        $audiences = $room->relationLoaded('audiences') ? $room->audiences : $room->audiences()->get();
-        $labels = $audiences->map(fn ($a) => $a->label ?: $a->audience_ref)->filter()->values();
+        $audienceLabel = null;
+        $audiences = [];
+        if ($revealAudience) {
+            $rows = $room->relationLoaded('audiences') ? $room->audiences : $room->audiences()->get();
+            $labels = $rows->map(fn ($a) => $a->label ?: $a->audience_ref)->filter()->values();
+            // Chosen audiences (teams, groups…) win over the resolver's single label.
+            $audienceLabel = $labels->isNotEmpty() ? $labels->implode(', ') : $this->audience->label($room);
+            $audiences = $rows->map(fn ($a) => ['type' => $a->audience_type, 'ref' => $a->audience_ref, 'label' => $a->label])->values()->all();
+        }
 
         return [
             'id' => $room->id,
             'title' => $room->title,
             'description' => $room->description,
             'status' => $room->status->value,
-            // Chosen audiences (teams, groups…) win over the resolver's single label.
-            'audience_label' => $labels->isNotEmpty() ? $labels->implode(', ') : $this->audience->label($room),
-            'audiences' => $audiences->map(fn ($a) => ['type' => $a->audience_type, 'ref' => $a->audience_ref, 'label' => $a->label])->values()->all(),
+            'audience_label' => $audienceLabel,
+            'audiences' => $audiences,
             'started_at' => $room->started_at?->toIso8601String(),
             'ended_at' => $room->ended_at?->toIso8601String(),
             'end_reason' => $room->end_reason,
+            'time_limit_minutes' => $room->time_limit_minutes,
+            'ends_at' => $room->ends_at?->toIso8601String(),
+            'extended_at' => $room->extended_at?->toIso8601String(),
             'limits' => [
                 'hosts' => $room->max_hosts,
                 'speakers' => $room->max_speakers,
@@ -87,7 +101,9 @@ class RoomStatePresenter
             $host = $room->members->firstWhere('role', RoomRole::Host);
             $stage = $room->members->filter(fn (Member $m) => $m->state === MemberState::Joined)->values();
 
-            return $this->summary($room) + [
+            $revealAudience = $room->created_by_key === $who->key || $this->access->canHost($who, $room) || $this->access->canMonitor($who, $room);
+
+            return $this->summary($room, $revealAudience) + [
                 'people' => (int) $room->people_count,
                 'listeners' => (int) $room->listeners_count,
                 'is_mine' => $room->created_by_key === $who->key,
@@ -175,7 +191,8 @@ class RoomStatePresenter
         $host = $room->members()->where('role', RoomRole::Host->value)->first();
 
         return [
-            'room' => $this->summary($room),
+            // Hosts, co-hosts, the creator and people with oversight (monitors) see who the room is for.
+            'room' => $this->summary($room, $isModerator || $room->created_by_key === $viewer->key || $this->access->canMonitor($viewer, $room)),
             // The room's host even when they are not connected, for "Hosted by …".
             'host' => $host ? ['key' => $host->participant_key, 'name' => $host->display_name, 'avatar_url' => $host->avatar_url] : null,
             'hosts' => $byRole(RoomRole::Host, RoomRole::CoHost),
@@ -210,6 +227,8 @@ class RoomStatePresenter
                 'start' => $me !== null && $me->role->isHost() && ! $room->isLive() && ! $room->isEnded(),
                 'end' => $isModerator && ! $room->isEnded()
                     && ! ($me->role === RoomRole::CoHost && count($byRole(RoomRole::Host)) > 0)
+                    && $this->authorizer->allows($viewer, RoomAction::End, $room),
+                'extend' => $isModerator && $room->canBeExtended()
                     && $this->authorizer->allows($viewer, RoomAction::End, $room),
                 'monitor' => ($me === null || ! $me->role->canSpeak()) && $this->access->canMonitor($viewer, $room),
                 'request_to_speak' => $me?->state === MemberState::Joined

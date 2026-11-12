@@ -77,7 +77,8 @@ class RoomApiController extends Controller
         $page = config('creators-audio-rooms.routes.name').'show';
 
         return response()->json([
-            'room' => $this->presenter->summary($room),
+            // The creator always sees who their room is for.
+            'room' => $this->presenter->summary($room, true),
             // Null when the ready-made pages are turned off and the host embeds rooms itself.
             'url' => app('router')->has($page) ? route($page, $room) : null,
         ], 201);
@@ -103,6 +104,15 @@ class RoomApiController extends Controller
     {
         $who = $this->who($request);
         $room = $this->rooms->end($who, $this->viewable($who, $room));
+
+        return response()->json($this->presenter->forViewer($room, $who));
+    }
+
+    /** Add the time limit once more (hosts and co-hosts; see lifecycle.allow_extension). */
+    public function extend(Request $request, string $room): JsonResponse
+    {
+        $who = $this->who($request);
+        $room = $this->rooms->extend($who, $this->viewable($who, $room));
 
         return response()->json($this->presenter->forViewer($room, $who));
     }

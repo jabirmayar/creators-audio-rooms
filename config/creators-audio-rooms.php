@@ -93,6 +93,11 @@ return [
         'ended_room_retention_days' => 30,
         // Register creators-audio-rooms:prune with the Laravel scheduler (every five minutes).
         'schedule_prune' => true,
+        // A live room ends by itself this many minutes after it started. 0 = no limit. Everyone in the room
+        // sees the time left; hosts get a notice five minutes before the end.
+        'max_room_minutes' => (int) env('AUDIO_ROOMS_MAX_ROOM_MINUTES', 0),
+        // Whether a host may extend a room once more by the same number of minutes.
+        'allow_extension' => (bool) env('AUDIO_ROOMS_ALLOW_EXTENSION', true),
     ],
 
     /*

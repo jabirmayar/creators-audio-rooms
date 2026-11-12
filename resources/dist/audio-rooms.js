@@ -93,6 +93,19 @@
         return fill(t.live_for, { duration });
     }
 
+    /** "Ends in 12 min" from the room's deadline. */
+    function endsIn(endsAt, t) {
+        const ends = Date.parse(endsAt || '');
+        if (!ends) return '';
+        const left = ends - Date.now();
+        if (left <= 0) return t.ends_soon || '';
+        let time;
+        if (left >= 3600000) time = Math.floor(left / 3600000) + 'h ' + Math.floor((left % 3600000) / 60000) + 'm';
+        else if (left >= 60000) time = Math.ceil(left / 60000) + ' min';
+        else time = Math.ceil(left / 1000) + 's';
+        return fill(t.ends_in || 'Ends in :time', { time });
+    }
+
     function initials(name) {
         const parts = String(name || '?').trim().split(/\s+/).slice(0, 2);
         return parts.map((p) => p.charAt(0).toUpperCase()).join('') || '?';
@@ -144,19 +157,37 @@
             if (this.session) headers['X-Audio-Room-Session'] = this.session;
             if (body !== undefined) headers['Content-Type'] = 'application/json';
 
-            const response = await fetch(this.base + path, {
-                method,
-                headers,
-                body: body === undefined ? undefined : JSON.stringify(body),
-                credentials: 'same-origin',
-                keepalive: Boolean(options && options.keepalive),
-                signal: options && options.signal,
-            });
+            const send = async () => {
+                const response = await fetch(this.base + path, {
+                    method,
+                    headers,
+                    body: body === undefined ? undefined : JSON.stringify(body),
+                    credentials: 'same-origin',
+                    keepalive: Boolean(options && options.keepalive),
+                    signal: options && options.signal,
+                });
+                let data = null;
+                try { data = await response.json(); } catch (e) { data = null; }
+                if (!response.ok) throw new ApiError(response.status, data);
+                return data;
+            };
 
-            let data = null;
-            try { data = await response.json(); } catch (e) { data = null; }
-            if (!response.ok) throw new ApiError(response.status, data);
-            return data;
+            try {
+                return await send();
+            } catch (e) {
+                // A server that is briefly busy (5xx) or a dropped request gets one quiet retry, but only for
+                // requests that are safe to repeat; check-ins have their own rhythm and offers must not double.
+                const transient = !(e instanceof ApiError) ? e && e.name !== 'AbortError' : e.status >= 500;
+                if (!transient || options?.retry === false || !Api.repeatable(method, path)) throw e;
+                await new Promise((resolve) => setTimeout(resolve, 1200));
+                return send();
+            }
+        }
+
+        static repeatable(method, path) {
+            const clean = path.split('?')[0];
+            if (clean === '/sync' || clean === '/signal' || clean === '/leave') return false;
+            return method === 'GET' || ['/join', '/start', '/end', '/extend', '/hand', '/mute', '/invitation', '/moderate', '/session'].includes(clean);
         }
     }
 
@@ -246,6 +277,7 @@
             this.clock = setInterval(() => {
                 this.el.querySelectorAll('[data-live-for]').forEach((node) => { node.textContent = liveFor(node.getAttribute('data-live-for'), this.t); });
             }, 30000);
+            this.deadlineClock = setInterval(() => this.tickDeadline(), 1000);
             this.load();
         }
 
@@ -255,6 +287,39 @@
             let text = this.t[key] || key;
             Object.keys(replace || {}).forEach((k) => { text = text.split(':' + k).join(replace[k]); });
             return text;
+        }
+
+        /**
+         * What a failed action says. Server faults and dropped requests get one calm line; the
+         * server's own wording ("Server Error", stack hints) never reaches the participant.
+         */
+        errorText(e) {
+            if (!(e instanceof ApiError) || e.status >= 500 || !e.body || !e.body.error) return this.tr('error_server');
+            return e.message || this.tr('error_generic');
+        }
+
+        /** Time left before the room's limit, refreshed every second; also raises the two warnings. */
+        tickDeadline() {
+            const room = this.state && this.state.room;
+            if (!room || room.status !== 'live' || !room.ends_at) return;
+            this.el.querySelectorAll('[data-ends-at]').forEach((node) => { node.textContent = endsIn(node.getAttribute('data-ends-at'), this.t); });
+            if (!this.joined) return;
+            if (this.deadlineWarnedFor !== room.ends_at) {
+                this.deadlineWarnedFor = room.ends_at;
+                this.deadlineWarned = {};
+            }
+            const left = Date.parse(room.ends_at) - Date.now();
+            const can = this.state.can || {};
+            if (can.moderate && left <= 5 * 60000 && left > 60000 && !this.deadlineWarned.host) {
+                this.deadlineWarned.host = true;
+                this.notice = { kind: 'warn', text: this.tr('time_limit_soon_host', { minutes: Math.max(1, Math.ceil(left / 60000)) }), action: can.extend ? 'extend' : null, sticky: true };
+                this.render();
+            }
+            if (left <= 60000 && left > 0 && !this.deadlineWarned.minute) {
+                this.deadlineWarned.minute = true;
+                this.notice = { kind: 'warn', text: this.tr('time_limit_soon'), sticky: true };
+                this.render();
+            }
         }
 
         applyBranding() {
@@ -277,7 +342,7 @@
                 this.setState(await this.api.request('GET', ''));
             } catch (e) {
                 if (e instanceof ApiError && (e.status === 401 || e.status === 419)) { this.handleError(e); return; }
-                this.notice = { kind: 'error', text: e.message || this.tr('error_generic') };
+                this.notice = { kind: 'error', text: this.errorText(e) };
             }
             this.render();
             if (this.takeEnterFlag()) return;
@@ -515,6 +580,7 @@
             try {
                 const data = await this.api.request('GET', '/sync?since=' + this.cursor + '&v=' + this.version + (document.hidden ? '&hidden=1' : ''), undefined, { signal: abort.signal });
                 this.lastSyncMs = Date.now() - started;
+                this.lastSyncOkAt = Date.now();
                 this.failures = 0;
                 if (this.status !== 'connected') this.setStatus('connected');
                 if (data.renew_session) this.renewSession();
@@ -567,9 +633,13 @@
         async onSyncError(e) {
             // A server that is briefly busy or restarting (5xx) is treated like a network blip.
             if (!(e instanceof ApiError) || e.status >= 500) {
-                // Network failure: keep the audio running and retry with backoff.
+                // Network failure: keep the audio running and retry with backoff. The audio itself is not
+                // interrupted by one missed check-in, so the "reconnecting" banner waits for a second miss
+                // or six seconds without an answer; a single blip stays invisible.
                 this.failures++;
-                this.setStatus(navigator.onLine ? 'reconnecting' : 'offline');
+                const quiet = Date.now() - (this.lastSyncOkAt || 0);
+                if (!navigator.onLine) this.setStatus('offline');
+                else if (this.failures >= 2 || quiet > 6000) this.setStatus('reconnecting');
                 await sleep(Math.min(8000, 500 * Math.pow(2, this.failures)));
                 return;
             }
@@ -611,7 +681,8 @@
             if (terminal[code]) {
                 if (e.body && e.body.state) this.setState(e.body.state);
                 this.disconnect(terminal[code]);
-                this.notice = { kind: code === 'room_ended' ? 'info' : 'warn', text: this.tr('state_' + terminal[code]), sticky: true };
+                const byLimit = code === 'room_ended' && this.state && this.state.room && this.state.room.end_reason === 'time_limit';
+                this.notice = { kind: code === 'room_ended' ? 'info' : 'warn', text: this.tr(byLimit ? 'state_time_limit' : 'state_' + terminal[code]), sticky: true };
                 this.render();
                 return;
             }
@@ -642,7 +713,7 @@
                 this.scheduleLobbyRefresh();
                 return;
             }
-            this.notice = { kind: 'error', text: (e && e.message) || this.tr('error_generic') };
+            this.notice = { kind: 'error', text: this.errorText(e) };
             this.render();
         }
 
@@ -2062,6 +2133,14 @@
                 case 'end':
                     if (await this.confirm(this.tr('end_confirm'), this.tr('end'))) await this.action('/end');
                     return;
+                case 'extend': {
+                    const state = await this.action('/extend');
+                    if (state) {
+                        this.notice = { kind: 'ok', text: this.tr('extended', { minutes: state.room.time_limit_minutes || '' }) };
+                        this.render();
+                    }
+                    return;
+                }
                 case 'mic': return this.toggleMic();
                 case 'pip': return this.pip ? this.closePip() : this.openPip();
                 case 'hand': {
@@ -2208,7 +2287,8 @@
             if (!n || n === this.noticeTimerFor) return;
             clearTimeout(this.noticeTimer);
             this.noticeTimerFor = n;
-            if (n.sticky || n.action || n.kind === 'error') return;
+            // Errors fade too: the participant has read them by then, and the log keeps the detail.
+            if (n.sticky || n.action) return;
             this.noticeTimer = setTimeout(() => {
                 if (this.notice !== n) return;
                 // Leave it while the pointer or keyboard focus is on it; try again shortly.
@@ -2220,7 +2300,7 @@
                 }
                 this.notice = null;
                 this.render();
-            }, n.kind === 'ok' ? 5000 : 8000);
+            }, n.kind === 'ok' ? 5000 : (n.kind === 'error' ? 10000 : 8000));
         }
 
         // ─── Rendering ─────────────────────────────────────────────────────
@@ -2254,6 +2334,7 @@
             if (s.host) meta.push('<span class="car-meta-host">' + avatarHtml(s.host, 'xs') + esc(this.tr('hosted_by', { name: s.host.name })) + '</span>');
             if (room.status === 'live') {
                 meta.push('<span class="car-meta-item">' + ICONS.clock + '<span data-live-for="' + esc(room.started_at || '') + '">' + esc(liveFor(room.started_at, this.t)) + '</span></span>');
+                if (room.ends_at) meta.push('<span class="car-meta-item car-meta-item--deadline"><span data-ends-at="' + esc(room.ends_at) + '">' + esc(endsIn(room.ends_at, this.t)) + '</span></span>');
                 meta.push('<span class="car-meta-item">' + ICONS.users + esc(this.tr('people_count', { count: s.counts.people })) + '</span>');
             }
             if (room.audience_label) meta.push('<span class="car-meta-item">' + ICONS.lock + esc(this.tr('for_audience', { names: room.audience_label })) + '</span>');
@@ -2334,6 +2415,9 @@
                 }
                 if (this.notice.action === 'reload') {
                     actions.push('<button type="button" class="car-btn car-btn--small car-btn--primary" data-action="reload">' + esc(this.tr('refresh')) + '</button>');
+                }
+                if (this.notice.action === 'extend' && this.state && this.state.can && this.state.can.extend) {
+                    actions.push('<button type="button" class="car-btn car-btn--small car-btn--primary" data-action="extend">' + esc(this.tr('extend', { minutes: this.state.room.time_limit_minutes || '' })) + '</button>');
                 }
                 const login = safeUrl(this.config.login_url);
                 if (this.notice.action === 'sign_in' && login) {

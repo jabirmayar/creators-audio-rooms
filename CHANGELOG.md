@@ -2,6 +2,18 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.14.0 - 2026-11-12
+
+### Added
+
+- Room time limit: `lifecycle.max_room_minutes` (env `AUDIO_ROOMS_MAX_ROOM_MINUTES`, default 0 = no limit). A room started under a limit carries `ends_at`; everyone sees "Ends in …" in the header, hosts get a notice five minutes before the end and everyone one minute before. The room ends on the first check-in or list after the deadline (`end_reason` = `time_limit`), so no scheduler is needed; the prune command catches rooms nobody is polling.
+- Hosts and co-hosts may extend a room once by the same number of minutes (`POST /api/rooms/{room}/extend`, `can.extend` in the state); `lifecycle.allow_extension` turns it off. Extensions are written to the moderation log.
+
+### Changed
+
+- Who a room is for (`audience_label`, `audiences`) is now only sent to the room's host, co-hosts and creator. Listeners and the room list seen by ordinary members no longer name the chosen audience, which could identify a single person a room was opened for.
+- Errors shown to participants: a check-in that fails once no longer flashes "Connection lost"; the banner waits for a second miss or six seconds without an answer (the audio itself keeps running either way). Server faults and dropped requests show one calm line instead of the server's own text, safe-to-repeat actions (join, start, end, hand, mute, invitation, moderation) are retried once after 1.2 s before anything is shown, and error banners fade after ten seconds.
+
 ## 1.13.0 - 2026-11-10
 
 ### Changed

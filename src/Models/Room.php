@@ -45,6 +45,9 @@ class Room extends Model
         'status' => RoomStatus::class,
         'started_at' => 'datetime',
         'ended_at' => 'datetime',
+        'ends_at' => 'datetime',
+        'extended_at' => 'datetime',
+        'time_limit_minutes' => 'integer',
         'max_hosts' => 'integer',
         'max_speakers' => 'integer',
         'max_listeners' => 'integer',
@@ -54,6 +57,22 @@ class Room extends Model
     protected static function packageTable(): string
     {
         return Tables::rooms();
+    }
+
+    /** A live room whose time limit has passed. */
+    public function isPastDeadline(): bool
+    {
+        return $this->isLive() && $this->ends_at !== null && $this->ends_at->lte(now());
+    }
+
+    /** A host may add the time limit once more (lifecycle.allow_extension). */
+    public function canBeExtended(): bool
+    {
+        return $this->isLive()
+            && $this->ends_at !== null
+            && $this->extended_at === null
+            && (int) $this->time_limit_minutes > 0
+            && (bool) config('creators-audio-rooms.lifecycle.allow_extension', true);
     }
 
     /** @return HasMany<Member, $this> */

@@ -151,7 +151,14 @@ class RoomManager
                 return $room;
             }
 
-            $room->forceFill(['status' => RoomStatus::Live, 'started_at' => now()]);
+            $limit = max(0, (int) config('creators-audio-rooms.lifecycle.max_room_minutes', 0));
+            $room->forceFill([
+                'status' => RoomStatus::Live,
+                'started_at' => now(),
+                'time_limit_minutes' => $limit > 0 ? $limit : null,
+                'ends_at' => $limit > 0 ? now()->addMinutes($limit) : null,
+                'extended_at' => null,
+            ]);
             $this->touch($room);
 
             return $room;
@@ -175,7 +182,31 @@ class RoomManager
         return $this->close($room, 'host', $who->key);
     }
 
-    /** End a room for a system reason (host absent, expired). */
+    /** A moderator adds the time limit once more, so a session is not cut off mid-sentence. */
+    public function extend(ParticipantIdentity $who, Room $room): Room
+    {
+        $this->access->ensureModerator($who, $room, RoomAction::End);
+
+        $room = $this->locked($room, function (Room $room) {
+            if (! $room->canBeExtended()) {
+                throw RoomActionDenied::because('cannot_extend', 409);
+            }
+            $room->forceFill([
+                'ends_at' => $room->ends_at->copy()->addMinutes((int) $room->time_limit_minutes),
+                'extended_at' => now(),
+            ]);
+            $this->touch($room);
+
+            return $room;
+        });
+
+        $this->moderationLog($room, $who->key, null, 'extend', ['minutes' => (int) $room->time_limit_minutes]);
+        $this->log('info', 'room extended', $room, $who->key, ['minutes' => (int) $room->time_limit_minutes]);
+
+        return $room;
+    }
+
+    /** End a room for a system reason (host absent, expired, time limit). */
     public function close(Room $room, string $reason, ?string $byKey = null): Room
     {
         $wasEnded = false;
@@ -392,7 +423,15 @@ class RoomManager
             Events\ParticipantLeft::dispatch($room, $key, 'disconnected');
         }
 
-        $this->endIfHostAbsent($room->fresh());
+        $room = $room->fresh();
+        if ($room->isPastDeadline()) {
+            // Enforced here, on the next check-in or list after the deadline, so it needs no scheduler.
+            $this->close($room, 'time_limit');
+
+            return;
+        }
+
+        $this->endIfHostAbsent($room);
     }
 
     // ─── Speaking ────────────────────────────────────────────────────────

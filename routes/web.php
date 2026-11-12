@@ -40,6 +40,7 @@ Route::middleware(array_merge((array) ($routes['middleware'] ?? ['web']), [Resol
                 Route::middleware('throttle:creators-audio-rooms.actions')->group(function () {
                     Route::post('/start', [RoomApiController::class, 'start'])->name('start');
                     Route::post('/end', [RoomApiController::class, 'end'])->name('end');
+                    Route::post('/extend', [RoomApiController::class, 'extend'])->name('extend');
                     Route::post('/join', [RoomApiController::class, 'join'])->name('join');
                     Route::post('/leave', [RoomApiController::class, 'leave'])->name('leave');
                     Route::post('/hand', [RoomApiController::class, 'hand'])->name('hand');
