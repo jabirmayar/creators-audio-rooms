@@ -22,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property bool $self_muted
  * @property ?string $connection_id
  * @property ?string $profile_url
+ * @property ?string $details
  * @property ?Carbon $hand_raised_at
  * @property ?Carbon $invited_to_speak_at
  * @property ?string $invited_by_key

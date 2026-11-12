@@ -2583,6 +2583,8 @@
                 (profile
                     ? '<a class="car-person-name" href="' + esc(profile) + '" target="_blank" rel="noopener noreferrer" title="' + esc(this.tr('view_profile')) + ': ' + esc(m.name) + '">' + nameText + '</a>'
                     : '<span class="car-person-name" title="' + esc(m.name) + '">' + nameText + '</span>') +
+                // Only in the state for viewers the app allows (see details_visible_to_types).
+                (m.details ? '<span class="car-person-details" title="' + esc(m.details) + '">' + esc(m.details) + '</span>' : '') +
                 (roleLabel ? '<span class="car-role-chip' + (m.role === 'host' ? ' car-role-chip--host' : '') + '">' + (m.role === 'host' ? ICONS.crown : ICONS.star) + esc(roleLabel) + '</span>' : '');
 
             if (canAct) {

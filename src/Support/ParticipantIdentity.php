@@ -28,6 +28,8 @@ final class ParticipantIdentity
         public readonly ?string $tenantKey = null,
         /** Extra host data for adapters (never stored by the package). */
         public readonly array $attributes = [],
+        /** A short line about the person ("Grade 6", "Teacher"), shown only to viewer types the app allows. */
+        public readonly ?string $details = null,
     ) {
         if ($type === '' || ! preg_match('/^[a-z0-9_\-]+$/i', $type)) {
             throw new InvalidArgumentException('Participant type must be letters, numbers, "-" or "_".');
@@ -44,10 +46,12 @@ final class ParticipantIdentity
     }
 
     /**
-     * @param  array{avatar_url?: ?string, profile_url?: ?string, tenant_key?: string|int|null, attributes?: array<string, mixed>}  $extra
+     * @param  array{avatar_url?: ?string, profile_url?: ?string, tenant_key?: string|int|null, attributes?: array<string, mixed>, details?: ?string}  $extra
      */
     public static function make(string $type, string|int $id, string $displayName, array $extra = []): self
     {
+        $details = isset($extra['details']) ? trim((string) $extra['details']) : '';
+
         return new self(
             type: $type,
             id: (string) $id,
@@ -56,6 +60,7 @@ final class ParticipantIdentity
             profileUrl: $extra['profile_url'] ?? null,
             tenantKey: isset($extra['tenant_key']) ? (string) $extra['tenant_key'] : null,
             attributes: $extra['attributes'] ?? [],
+            details: $details !== '' ? mb_substr($details, 0, 191) : null,
         );
     }
 

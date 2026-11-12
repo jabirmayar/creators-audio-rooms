@@ -46,12 +46,20 @@ return [
     | participant type so IDs from different tables never collide
     | (e.g. "user:5" and "admin:5" are different people).
     */
+    /*
+    | Participant details: a short line about a member ("Grade 6", "Japanese · N5 · Group 2", "Teacher")
+    | shown under their name, but only to viewers whose participant type is listed here, whatever their
+    | role in the room. Empty = shown to nobody. Each guard names the attribute (or accessor) that holds it.
+    */
+    'details_visible_to_types' => ['staff'],
+
     'guards' => [
         'web' => [
             'type' => 'user',
             'name_attribute' => 'name',
             'avatar_attribute' => null,
             'profile_route' => null,
+            'details_attribute' => null,
         ],
     ],
 

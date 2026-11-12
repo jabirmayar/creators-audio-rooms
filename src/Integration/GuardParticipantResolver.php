@@ -61,6 +61,8 @@ class GuardParticipantResolver implements ParticipantResolver
         $nameAttribute = $options['name_attribute'] ?? 'name';
         $avatarAttribute = $options['avatar_attribute'] ?? null;
         $profileRoute = $options['profile_route'] ?? null;
+        // An attribute or accessor on the model with a short line about the person (see details_visible_to_types).
+        $detailsAttribute = $options['details_attribute'] ?? null;
 
         return ParticipantIdentity::make(
             $options['type'] ?? 'user',
@@ -69,6 +71,7 @@ class GuardParticipantResolver implements ParticipantResolver
             [
                 'avatar_url' => $avatarAttribute ? data_get($user, $avatarAttribute) : null,
                 'profile_url' => $profileRoute ? route($profileRoute, $user->getAuthIdentifier()) : null,
+                'details' => $detailsAttribute ? data_get($user, $detailsAttribute) : null,
             ],
         );
     }

@@ -2,6 +2,12 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## 1.15.0 - 2026-11-12
+
+### Added
+
+- Participant details: each guard may name a `details_attribute` (an attribute or accessor on the user model) holding a short line about the person, e.g. "Grade 6" or "Teacher". It is saved on the member when they join and shown under their name, but only to viewers whose participant type is listed in `details_visible_to_types` (default `['staff']`), whatever their role in the room. A student made host or co-host never receives it. Migration adds `details` to the members table.
+
 ## 1.14.1 - 2026-11-12
 
 ### Fixed

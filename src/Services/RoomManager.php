@@ -84,6 +84,7 @@ class RoomManager
                 'display_name' => $host->displayName,
                 'avatar_url' => $host->avatarUrl,
                 'profile_url' => $host->profileUrl,
+                'details' => $host->details,
                 'role' => RoomRole::Host,
                 // The creator holds the host role but is not in the room until they join.
                 'state' => MemberState::Left,
@@ -293,6 +294,7 @@ class RoomManager
                 'display_name' => $who->displayName,
                 'avatar_url' => $who->avatarUrl,
                 'profile_url' => $who->profileUrl,
+                'details' => $who->details,
                 'state' => MemberState::Joined,
                 // The same connection when the page proves it held this member's last one (its session lapsed, or
                 // a slow spell marked it as gone): the others see nothing change and keep their audio links. A

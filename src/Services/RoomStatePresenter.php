@@ -165,9 +165,15 @@ class RoomStatePresenter
 
         $me = $this->access->member($viewer, $room);
         $isModerator = $me?->state === MemberState::Joined && $me->role->canModerate();
+        // Participant details are for the app's chosen viewer types only (e.g. staff), never for a
+        // student host: the role in the room does not change who may see them.
+        $seesDetails = in_array($viewer->type, (array) config('creators-audio-rooms.details_visible_to_types', []), true);
 
-        $public = $members->map(function (Member $member) use ($room, $isModerator) {
+        $public = $members->map(function (Member $member) use ($room, $isModerator, $seesDetails) {
             $data = $member->toPublicArray();
+            if ($seesDetails && filled($member->details)) {
+                $data['details'] = $member->details;
+            }
             $data['connected'] = $this->signals->presence($member->room_id, $member->participant_key) !== null;
             // Moderators only offer "Invite as co-host" to people the app lets host.
             if ($isModerator && ! $member->role->isHost() && $member->role !== RoomRole::Monitor) {
