@@ -28,6 +28,9 @@ use Illuminate\Support\Carbon;
  * @property ?Carbon $started_at
  * @property ?Carbon $ended_at
  * @property ?string $end_reason
+ * @property ?int $time_limit_minutes
+ * @property ?Carbon $ends_at
+ * @property ?Carbon $extended_at
  * @property int $version
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
