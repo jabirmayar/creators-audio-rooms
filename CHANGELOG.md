@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.15.1 - 2026-11-14
+
+### Fixed
+
+- Cloudflare SFU subscription failures now log bounded, sanitized per-track error details, making failed speaker subscriptions diagnosable without logging session identifiers or SDP.
+
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
 ## 1.15.0 - 2026-11-12

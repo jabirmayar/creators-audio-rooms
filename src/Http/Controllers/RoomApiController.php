@@ -17,6 +17,7 @@ use daacreators\CreatorsAudioRooms\Support\ParticipantIdentity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Log;
 
 /**
  * JSON endpoints used by the browser bundle. Every endpoint re-resolves the
@@ -300,13 +301,40 @@ class RoomApiController extends Controller
         ])->all();
         $response = $this->sfu->subscribe($sessionId, $publications);
         $subscriptions = [];
+        $trackFailures = [];
         foreach ((array) ($response['tracks'] ?? []) as $index => $track) {
-            if (! is_array($track) || ! empty($track['errorCode']) || ! isset($publishers[$index], $track['mid'])) {
+            if (! is_array($track)) {
+                $trackFailures[] = ['index' => $index, 'code' => 'invalid_track_response'];
+                continue;
+            }
+            if (! empty($track['errorCode']) || ! isset($publishers[$index], $track['mid'])) {
+                $failure = ['index' => $index];
+                if (isset($track['errorCode'])) {
+                    $failure['code'] = substr((string) $track['errorCode'], 0, 100);
+                }
+                if (is_string($track['errorDescription'] ?? null)) {
+                    $failure['description'] = substr(trim(preg_replace('/[\x00-\x1F\x7F]/u', ' ', $track['errorDescription']) ?? ''), 0, 240);
+                }
+                if (! isset($track['errorCode']) && ! isset($track['mid'])) {
+                    $failure['code'] = 'missing_mid';
+                }
+                $trackFailures[] = $failure;
                 continue;
             }
             $subscriptions[] = ['mid' => (string) $track['mid'], 'key' => $publishers[$index]->participant_key];
         }
-        if ($subscriptions === [] || empty($response['sessionDescription']['sdp'])) {
+        $hasSessionDescription = is_string($response['sessionDescription']['sdp'] ?? null)
+            && $response['sessionDescription']['sdp'] !== '';
+        if ($trackFailures !== [] || $subscriptions === [] || ! $hasSessionDescription) {
+            Log::warning('creators-audio-rooms: Cloudflare SFU subscription returned incomplete tracks', [
+                'room_id' => $roomModel->getKey(),
+                'track_count' => count($publications),
+                'subscribed_count' => count($subscriptions),
+                'has_session_description' => $hasSessionDescription,
+                'track_failures' => array_slice($trackFailures, 0, 32),
+            ]);
+        }
+        if ($subscriptions === [] || ! $hasSessionDescription) {
             throw new \RuntimeException('Cloudflare Realtime could not subscribe to the room audio.');
         }
 
