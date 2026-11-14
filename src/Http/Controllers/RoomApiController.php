@@ -305,6 +305,7 @@ class RoomApiController extends Controller
         foreach ((array) ($response['tracks'] ?? []) as $index => $track) {
             if (! is_array($track)) {
                 $trackFailures[] = ['index' => $index, 'code' => 'invalid_track_response'];
+
                 continue;
             }
             if (! empty($track['errorCode']) || ! isset($publishers[$index], $track['mid'])) {
@@ -319,6 +320,7 @@ class RoomApiController extends Controller
                     $failure['code'] = 'missing_mid';
                 }
                 $trackFailures[] = $failure;
+
                 continue;
             }
             $subscriptions[] = ['mid' => (string) $track['mid'], 'key' => $publishers[$index]->participant_key];

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.15.2 - 2026-11-14
+
+### Fixed
+
+- Apply Pint formatting to Cloudflare SFU subscription diagnostics.
+
 ## 1.15.1 - 2026-11-14
 
 ### Fixed
