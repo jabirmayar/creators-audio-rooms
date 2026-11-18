@@ -4,6 +4,7 @@ namespace daacreators\CreatorsAudioRooms\Http\Controllers;
 
 use daacreators\CreatorsAudioRooms\Exceptions\RoomActionDenied;
 use daacreators\CreatorsAudioRooms\Http\Middleware\ResolveParticipant;
+use daacreators\CreatorsAudioRooms\Models\Member;
 use daacreators\CreatorsAudioRooms\Models\Room;
 use daacreators\CreatorsAudioRooms\Services\RoomAccess;
 use daacreators\CreatorsAudioRooms\Services\RoomManager;
@@ -17,6 +18,7 @@ use daacreators\CreatorsAudioRooms\Support\ParticipantIdentity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -27,6 +29,9 @@ use Illuminate\Support\Facades\Log;
 class RoomApiController extends Controller
 {
     public const TOKEN_HEADER = 'X-Audio-Room-Session';
+
+    /** Cloudflare track errors for a speaker still connecting or one that just dropped: retried, not alarming. */
+    private const ROUTINE_SFU_TRACK_ERRORS = ['not_found_track_error', 'empty_track_error'];
 
     public function __construct(
         private readonly RoomManager $rooms,
@@ -261,6 +266,8 @@ class RoomApiController extends Controller
             'publishers' => ['required', 'array', 'min:1', 'max:32'],
             'publishers.*' => ['required', 'string', 'max:191'],
             'session_id' => ['nullable', 'string', 'max:128'],
+            // The session_id is an empty one kept from an earlier attempt that reached no speaker.
+            'spare' => ['sometimes', 'boolean'],
         ]);
         $who = $this->who($request);
         $roomModel = $this->viewable($who, $room);
@@ -278,28 +285,34 @@ class RoomApiController extends Controller
             ->get();
         $publishers = $publishers->reject(fn ($publisher) => $publisher->participant_key === $member->participant_key)->values();
         $sessionId = (string) ($data['session_id'] ?? '');
-        if ($sessionId !== '') {
-            if (! $member->sfu_receiver_session_id || ! hash_equals((string) $member->sfu_receiver_session_id, $sessionId)) {
+        $spare = $request->boolean('spare');
+        if ($sessionId !== '' && ! hash_equals((string) $member->sfu_receiver_session_id, $sessionId)) {
+            if (! $spare) {
                 throw RoomActionDenied::because('not_allowed');
             }
-        } else {
-            if ($publishers->isEmpty()) {
-                return response()->json(['subscriptions' => [], 'session_description' => null]);
-            }
-            $created = $this->sfu->createSession();
-            $sessionId = (string) ($created['sessionId'] ?? '');
-            if ($sessionId === '') {
-                throw new \RuntimeException('Cloudflare Realtime did not return a receiving session.');
-            }
+            // A spare from before a rejoin: start a fresh session instead.
+            [$sessionId, $spare] = ['', false];
         }
         if ($publishers->isEmpty()) {
-            return response()->json(['session_id' => $sessionId, 'subscriptions' => [], 'session_description' => null]);
+            return response()->json(['session_id' => $sessionId !== '' ? $sessionId : null, 'subscriptions' => [], 'session_description' => null]);
+        }
+        if ($sessionId === '') {
+            $sessionId = $this->newSfuReceiverSession();
         }
         $publications = $publishers->map(fn ($publisher) => [
             'sessionId' => $publisher->sfu_publisher_session_id,
             'trackName' => 'audio',
         ])->all();
-        $response = $this->sfu->subscribe($sessionId, $publications);
+        try {
+            $response = $this->sfu->subscribe($sessionId, $publications);
+        } catch (\RuntimeException $e) {
+            if (! $spare) {
+                throw $e;
+            }
+            // A spare that sat unused may have expired on Cloudflare's side.
+            $sessionId = $this->newSfuReceiverSession();
+            $response = $this->sfu->subscribe($sessionId, $publications);
+        }
         $subscriptions = [];
         $trackFailures = [];
         foreach ((array) ($response['tracks'] ?? []) as $index => $track) {
@@ -320,6 +333,9 @@ class RoomApiController extends Controller
                     $failure['code'] = 'missing_mid';
                 }
                 $trackFailures[] = $failure;
+                if (($failure['code'] ?? null) === 'not_found_track_error' && isset($publishers[$index])) {
+                    $this->reportMissingSfuPublisher($roomModel, $publishers[$index]);
+                }
 
                 continue;
             }
@@ -328,7 +344,12 @@ class RoomApiController extends Controller
         $hasSessionDescription = is_string($response['sessionDescription']['sdp'] ?? null)
             && $response['sessionDescription']['sdp'] !== '';
         if ($trackFailures !== [] || $subscriptions === [] || ! $hasSessionDescription) {
-            Log::warning('creators-audio-rooms: Cloudflare SFU subscription returned incomplete tracks', [
+            // A speaker still connecting or one that just dropped is routine and retried; anything else is worth a look.
+            $routine = $trackFailures !== [] && ($hasSessionDescription || $subscriptions === []);
+            foreach ($trackFailures as $failure) {
+                $routine = $routine && in_array($failure['code'] ?? null, self::ROUTINE_SFU_TRACK_ERRORS, true);
+            }
+            Log::log($routine ? 'info' : 'warning', 'creators-audio-rooms: Cloudflare SFU subscription returned incomplete tracks', [
                 'room_id' => $roomModel->getKey(),
                 'track_count' => count($publications),
                 'subscribed_count' => count($subscriptions),
@@ -336,8 +357,32 @@ class RoomApiController extends Controller
                 'track_failures' => array_slice($trackFailures, 0, 32),
             ]);
         }
-        if ($subscriptions === [] || ! $hasSessionDescription) {
-            throw new \RuntimeException('Cloudflare Realtime could not subscribe to the room audio.');
+        // Speakers whose track Cloudflare could not hand over yet (still connecting, or dropped and about
+        // to republish). The client asks for them again on a later check-in.
+        $subscribedKeys = array_column($subscriptions, 'key');
+        $unavailable = $publishers->pluck('participant_key')
+            ->reject(fn ($key) => in_array($key, $subscribedKeys, true))
+            ->values()
+            ->all();
+        if ($subscriptions === []) {
+            // Nothing was added to the session, so the client keeps it for its next attempt instead of
+            // having a new one created each time.
+            $member->forceFill(['sfu_receiver_session_id' => $sessionId])->save();
+
+            return response()->json([
+                'session_id' => $sessionId,
+                'subscriptions' => [],
+                'session_description' => null,
+                'unavailable' => $unavailable,
+            ]);
+        }
+        if (! $hasSessionDescription) {
+            return response()->json([
+                'session_id' => null,
+                'subscriptions' => [],
+                'session_description' => null,
+                'unavailable' => $publishers->pluck('participant_key')->all(),
+            ]);
         }
 
         $member->forceFill(['sfu_receiver_session_id' => $sessionId])->save();
@@ -346,7 +391,42 @@ class RoomApiController extends Controller
             'session_id' => $sessionId,
             'subscriptions' => $subscriptions,
             'session_description' => $response['sessionDescription'],
+            'unavailable' => $unavailable,
         ]);
+    }
+
+    private function newSfuReceiverSession(): string
+    {
+        $sessionId = (string) ($this->sfu->createSession()['sessionId'] ?? '');
+        if ($sessionId === '') {
+            throw new \RuntimeException('Cloudflare Realtime did not return a receiving session.');
+        }
+
+        return $sessionId;
+    }
+
+    /**
+     * Cloudflare no longer has this speaker's track: their browser dropped without leaving. Two reports
+     * within a minute stop advertising it, so listeners stop asking; if that browser is still there it
+     * notices and publishes again.
+     */
+    private function reportMissingSfuPublisher(Room $room, Member $publisher): void
+    {
+        $sessionId = (string) $publisher->sfu_publisher_session_id;
+        $cache = Cache::store(config('creators-audio-rooms.signaling.cache_store') ?: null);
+        $key = 'creators-audio-rooms:sfu-missing:'.$publisher->getKey().':'.hash('xxh128', $sessionId);
+        $cache->add($key, 0, 60);
+        if ((int) $cache->increment($key) < 2) {
+            return;
+        }
+        $cache->forget($key);
+        $cleared = $room->members()
+            ->whereKey($publisher->getKey())
+            ->where('sfu_publisher_session_id', $sessionId)
+            ->update(['sfu_publisher_session_id' => null, 'sfu_publisher_mid' => null, 'sfu_publisher_ready' => false]);
+        if ($cleared > 0) {
+            $room->increment('version');
+        }
     }
 
     /** Complete the SFU offer/answer exchange for this participant's receiving session. */

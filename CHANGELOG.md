@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.15.3 - 2026-11-18
+
+### Fixed
+
+- SFU: a muted speaker's microphone stays attached (switched off, sending only silence), so listeners joining or reconnecting can still subscribe to them instead of getting `empty_track_error` until they unmute. Unmuting no longer needs a new connection. Direct links still send nothing while muted.
+- SFU: `POST /sfu/subscribe` no longer fails with a server error when Cloudflare cannot hand over some or all speakers. It returns what it could subscribe plus an `unavailable` list, and the browser asks for the missing speakers again on a later check-in. Before, a listener who reached only some speakers never retried the rest until the room changed.
+- SFU: a speaker whose track Cloudflare reports missing twice within a minute (their browser dropped without leaving) is no longer advertised, so listeners stop asking for it. If that browser is still in the room it notices and publishes again.
+- SFU: when a subscribe reaches no speaker, the empty receiving session is kept and reused for the next attempt instead of a new one being created each time; an expired or outdated one is replaced quietly.
+- SFU: routine track errors (a speaker still connecting or just dropped) are logged at `info`; other incomplete subscriptions still log a warning.
+
 ## 1.15.2 - 2026-11-14
 
 ### Fixed

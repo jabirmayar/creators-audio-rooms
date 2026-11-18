@@ -224,6 +224,8 @@
             this.sfuReceiver = null;
             this.sfuReceiverSignature = '';
             this.sfuReceiverStarting = null;
+            this.sfuSpareSession = null; // an empty receiving session the server kept after reaching no speaker
+            this.stateRequestedAt = 0;   // when the request that returned the current state was sent
             this.transportMode = 'webrtc';
             this.outbox = new Map();  // key -> last signal sent to that person (keeps them in order)
             this.localStream = null;
@@ -586,7 +588,7 @@
                 if (data.renew_session) this.renewSession();
                 if (data.state) {
                     this.touchActivity();
-                    this.setState(data.state);
+                    this.setState(data.state, started);
                     this.render();
                     this.reconcilePeers();
                 }
@@ -724,8 +726,9 @@
             if (status === 'reconnecting' || status === 'offline') this.announce(this.tr('state_' + status));
         }
 
-        setState(state) {
+        setState(state, requestedAt) {
             if (!state) return;
+            this.stateRequestedAt = requestedAt || Date.now();
             const before = this.state && this.state.me;
             if (this.pendingMute !== null && this.pendingMute !== undefined && state.me && ROLE_SPEAKS[state.me.role] && !state.me.moderator_muted) {
                 this.patchSelfMuted(state, this.pendingMute);
@@ -906,23 +909,39 @@
         /**
          * The track connections should carry: the microphone only while it is on. A switched-off
          * track still sends silence frames to every member (and through a relay, which is billed),
-         * so muted speakers send nothing at all instead.
+         * so muted speakers send nothing at all instead (direct links; the SFU uses sfuTrack).
          */
         sendingTrack() {
             const track = this.localTrack();
             return track && track.enabled && track.readyState === 'live' ? track : null;
         }
 
+        /**
+         * The track the SFU publisher carries: the microphone even while switched off, which sends only
+         * silence. Cloudflare cannot hand over a track that carries no packets, so a muted speaker who sent
+         * nothing would be unreachable for listeners joining or reconnecting until they unmuted.
+         */
+        sfuTrack() {
+            const track = this.localTrack();
+            return track && track.readyState === 'live' ? track : null;
+        }
+
+        /** The server refuses a new SFU publisher while the host has muted this speaker. */
+        canStartSfuPublisher() {
+            return !(this.state && this.state.me && this.state.me.moderator_muted);
+        }
+
         attachLocalTrack() {
-            const track = this.sendingTrack();
             if (this.transportMode === 'sfu') {
+                const track = this.sfuTrack();
                 if (this.sfuPublisher && this.sfuPublisher.sender) {
-                    this.sfuPublisher.sender.replaceTrack(track).catch(() => {});
-                } else if (track) {
+                    if (this.sfuPublisher.sender.track !== track) this.sfuPublisher.sender.replaceTrack(track).catch(() => {});
+                } else if (track && this.canStartSfuPublisher()) {
                     this.startSfuPublisher(track);
                 }
                 return;
             }
+            const track = this.sendingTrack();
             this.peers.forEach((peer) => {
                 const tr = peer.pc.getTransceivers()[0];
                 if (tr && (tr.direction === 'sendrecv' || tr.direction === 'sendonly') && tr.sender.track !== track) {
@@ -1029,10 +1048,11 @@
                     await this.waitForPeerConnected(pc);
                     await this.api.request('POST', '/sfu/ready', { session_id: response.session_id });
                     publisher.ready = true;
+                    publisher.readyAt = Date.now();
                     this.sfuPublisherRetryAt = 0;
                     this.sfuPublisherRetryDelay = 1500;
                     this.applyBitrate(publisher);
-                    if (!this.sendingTrack()) await publisher.sender.replaceTrack(null).catch(() => {});
+                    if (publisher.sender.track !== this.sfuTrack()) await publisher.sender.replaceTrack(this.sfuTrack()).catch(() => {});
                     if (pc.connectionState === 'failed') {
                         this.closeSfuPublisher(true);
                         setTimeout(() => this.attachLocalTrack(), this.sfuRebuildDelay());
@@ -1092,8 +1112,15 @@
                 return;
             }
             if (!ROLE_SPEAKS[me.role] && this.sfuPublisher) this.closeSfuPublisher(true);
-            const track = this.sendingTrack();
-            if (track && !this.sfuPublisher && !this.sfuPublisherStarting && Date.now() >= this.sfuPublisherRetryAt) this.startSfuPublisher(track);
+            // The server stops advertising a microphone Cloudflare reports missing. A state asked for after this
+            // publisher went live that no longer lists it means exactly that, so publish again.
+            const published = this.sfuPublisher;
+            if (published && published.ready && this.stateRequestedAt > published.readyAt) {
+                const mine = this.members().find((member) => member.key === me.key);
+                if (mine && mine.sfu_publisher !== published.sessionId) this.closeSfuPublisher(false);
+            }
+            const track = this.sfuTrack();
+            if (track && this.canStartSfuPublisher() && !this.sfuPublisher && !this.sfuPublisherStarting && Date.now() >= this.sfuPublisherRetryAt) this.startSfuPublisher(track);
 
             const publishers = this.members().filter((member) => member.key !== me.key && member.sfu_publisher && ROLE_SPEAKS[member.role]);
             const signature = publishers.map((member) => member.key + ':' + member.conn + ':' + member.sfu_publisher).sort().join('|');
@@ -1126,9 +1153,14 @@
                     }
                     const subscribe = await this.api.request('POST', '/sfu/subscribe', {
                         publishers: additions.map((member) => member.key),
-                        ...(canAdd ? { session_id: current.sessionId } : {}),
+                        ...(canAdd ? { session_id: current.sessionId } : (this.sfuSpareSession ? { session_id: this.sfuSpareSession, spare: true } : {})),
                     });
-                    if (!subscribe.session_description || !subscribe.subscriptions || !subscribe.subscriptions.length) return;
+                    if (!subscribe.session_description || !subscribe.subscriptions || !subscribe.subscriptions.length) {
+                        // No speaker could be reached yet: keep the empty session for the next attempt.
+                        if (!canAdd) this.sfuSpareSession = subscribe.session_id || null;
+                        return;
+                    }
+                    if (!canAdd) this.sfuSpareSession = null;
                     pc = canAdd ? current.pc : new RTCPeerConnection({ iceServers: this.iceServers, bundlePolicy: 'max-bundle' });
                     const receiver = canAdd ? current : { pc, sessionId: subscribe.session_id, byMid: new Map(), publishers: new Map() };
                     subscribe.subscriptions.forEach((item) => receiver.byMid.set(String(item.mid), item.key));
@@ -1173,9 +1205,11 @@
                         session_description: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
                     });
                     this.sfuReceiver = receiver;
-                    this.sfuReceiverSignature = signature;
+                    // Speakers Cloudflare could not hand over yet stay outstanding, so the next check-in asks for them again.
+                    this.sfuReceiverSignature = subscribe.unavailable && subscribe.unavailable.length ? '' : signature;
                     this.render();
                 } catch (e) {
+                    this.sfuSpareSession = null;
                     if (this.sfuReceiver && this.sfuReceiver.pc === pc) this.closeSfuReceiver();
                     else if (pc) try { pc.close(); } catch (ignore) { /* already closed */ }
                     this.notice = { kind: 'error', text: (e && e.message) || this.tr('error_generic') };
@@ -1895,6 +1929,7 @@
             Array.from(this.peers.keys()).forEach((key) => this.closePeer(key, false));
             this.closeSfuPublisher(false);
             this.closeSfuReceiver();
+            this.sfuSpareSession = null;
         }
 
         // Connection setup messages to one person go out in order. If the server is briefly busy or
@@ -2095,8 +2130,9 @@
         async action(path, body) {
             this.touchActivity();
             try {
+                const requestedAt = Date.now();
                 const state = await this.api.request('POST', path, body || {});
-                this.setState(state);
+                this.setState(state, requestedAt);
                 this.render();
                 this.reconcilePeers();
                 return state;
