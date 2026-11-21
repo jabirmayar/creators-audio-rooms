@@ -2,6 +2,7 @@
 
 namespace daacreators\CreatorsAudioRooms\Signaling;
 
+use daacreators\CreatorsAudioRooms\Exceptions\SfuUnavailable;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -96,31 +97,36 @@ class CloudflareSfu
             $response = $body === null
                 ? $request->send(strtoupper($method), $url)
                 : $request->{$method}($url, $body);
-            $data = (array) $response->json();
-            if (! $response->successful() || isset($data['errorCode'])) {
-                $code = (string) ($data['errorCode'] ?? 'http_'.$response->status());
-                $context = [
-                    'operation' => strtoupper($method).' '.$path,
-                    'code' => $code,
-                    'status' => $response->status(),
-                ];
-                if (is_string($data['errorDescription'] ?? null)) {
-                    $context['description'] = substr(trim(preg_replace('/[\x00-\x1F\x7F]/u', ' ', $data['errorDescription']) ?? ''), 0, 400);
-                }
-                if ($response->header('cf-ray')) {
-                    $context['cf_ray'] = $response->header('cf-ray');
-                }
-                Log::warning('creators-audio-rooms: Cloudflare SFU request failed', $context);
-                throw new RuntimeException('Cloudflare Realtime could not complete the audio connection ('.$code.').');
-            }
-
-            return $data;
         } catch (Throwable $e) {
-            if ($e instanceof RuntimeException && str_starts_with($e->getMessage(), 'Cloudflare Realtime')) {
-                throw $e;
-            }
-            Log::warning('creators-audio-rooms: Cloudflare SFU request unavailable', ['error' => $e->getMessage()]);
-            throw new RuntimeException('Cloudflare Realtime is temporarily unavailable. Please try joining again.', previous: $e);
+            Log::warning('creators-audio-rooms: Cloudflare SFU request unavailable', [
+                'operation' => strtoupper($method).' '.$path,
+                'error' => $e->getMessage(),
+            ]);
+            throw new SfuUnavailable($e);
         }
+
+        $data = (array) $response->json();
+        if (! $response->successful() || isset($data['errorCode'])) {
+            $code = (string) ($data['errorCode'] ?? 'http_'.$response->status());
+            $context = [
+                'operation' => strtoupper($method).' '.$path,
+                'code' => $code,
+                'status' => $response->status(),
+            ];
+            if (is_string($data['errorDescription'] ?? null)) {
+                $context['description'] = substr(trim(preg_replace('/[\x00-\x1F\x7F]/u', ' ', $data['errorDescription']) ?? ''), 0, 400);
+            }
+            if ($response->header('cf-ray')) {
+                $context['cf_ray'] = $response->header('cf-ray');
+            }
+            Log::warning('creators-audio-rooms: Cloudflare SFU request failed', $context);
+            if ($response->serverError()) {
+                throw new SfuUnavailable;
+            }
+            // Participants see this, so it does not name the vendor.
+            throw new RuntimeException('The audio connection could not be completed ('.$code.').');
+        }
+
+        return $data;
     }
 }

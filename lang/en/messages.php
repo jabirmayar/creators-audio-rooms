@@ -204,5 +204,6 @@ return [
         'no_invitation' => 'This invitation is no longer open.',
         'host_present' => 'Only the host can end the room while they are in it.',
         'too_many_requests' => 'Too many requests. Please slow down.',
+        'sfu_unavailable' => 'The audio connection is busy right now. Trying again shortly…',
     ],
 ];

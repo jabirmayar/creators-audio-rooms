@@ -18,6 +18,8 @@ class SfuSubscribeTest extends ApiTestCase
 
     private const EMPTY = ['errorCode' => 'empty_track_error', 'errorDescription' => 'No track data from remote peer.'];
 
+    private const TIMEOUT = 'timeout';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -147,6 +149,61 @@ class SfuSubscribeTest extends ApiTestCase
         Log::shouldHaveReceived('log')->with('warning', 'creators-audio-rooms: Cloudflare SFU subscription returned incomplete tracks', \Mockery::any())->once();
     }
 
+    public function test_a_cloudflare_timeout_lists_every_speaker_for_a_retry_instead_of_failing(): void
+    {
+        [$roomId, $speakers, $listener] = $this->roomWithSpeakers(2);
+        $this->fakeCloudflare([self::TIMEOUT, ['tracks' => [['mid' => '0'], ['mid' => '1']], 'sessionDescription' => self::OFFER]]);
+
+        $this->subscribe($listener, $roomId)
+            ->assertOk()
+            ->assertJsonPath('session_id', null)
+            ->assertJsonPath('subscriptions', [])
+            ->assertJsonPath('session_description', null)
+            ->assertJsonPath('unavailable', array_map(fn ($speaker) => $this->keyOf($speaker), $speakers));
+        $this->assertNull($this->memberOf($listener)->sfu_receiver_session_id);
+
+        $this->subscribe($listener, $roomId)->assertOk()->assertJsonPath('session_id', 'recv-2')->assertJsonCount(2, 'subscriptions');
+    }
+
+    public function test_a_cloudflare_server_error_while_adding_to_a_live_session_keeps_that_session(): void
+    {
+        [$roomId, , $listener] = $this->roomWithSpeakers(1);
+        $this->fakeCloudflare([Http::response(['errorCode' => 'internal_error'], 503)]);
+        $this->memberOf($listener)->forceFill(['sfu_receiver_session_id' => 'recv-live'])->save();
+
+        $this->subscribe($listener, $roomId, ['session_id' => 'recv-live'])
+            ->assertOk()
+            ->assertJsonPath('session_id', 'recv-live')
+            ->assertJsonCount(1, 'unavailable');
+        $this->assertSame('recv-live', $this->memberOf($listener)->sfu_receiver_session_id);
+    }
+
+    public function test_a_timed_out_spare_is_not_replaced_by_another_session_in_the_same_request(): void
+    {
+        [$roomId, , $listener] = $this->roomWithSpeakers(1);
+        $this->fakeCloudflare([['tracks' => [self::EMPTY]], self::TIMEOUT]);
+        $this->subscribe($listener, $roomId)->assertOk()->assertJsonPath('session_id', 'recv-1');
+
+        $this->subscribe($listener, $roomId, ['session_id' => 'recv-1', 'spare' => true])
+            ->assertOk()
+            ->assertJsonPath('session_id', null);
+        $this->assertSame(1, $this->sentTo('/sessions/new'));
+    }
+
+    public function test_a_cloudflare_timeout_while_publishing_is_a_retryable_answer_without_the_vendor_name(): void
+    {
+        [$roomId, $speakers] = $this->roomWithSpeakers(1);
+        Http::fake(['*/sessions/new' => Http::failedConnection()]);
+
+        $response = $this->api($speakers[0], 'POST', "/rooms/{$roomId}/sfu/publish", [
+            'session_description' => self::OFFER,
+            'mid' => '0',
+        ]);
+
+        $response->assertStatus(503)->assertJsonPath('error', 'sfu_unavailable');
+        $this->assertStringNotContainsString('Cloudflare', (string) $response->json('message'));
+    }
+
     /** @return array{0: string, 1: list<Authenticatable>, 2: Authenticatable} room id, published speakers (host first), a listener */
     private function roomWithSpeakers(int $count): array
     {
@@ -193,7 +250,11 @@ class SfuSubscribeTest extends ApiTestCase
         }
         $tracks = Http::sequence();
         foreach ($trackResponses as $response) {
-            is_array($response) ? $tracks->push($response) : $tracks->pushResponse($response);
+            match (true) {
+                $response === self::TIMEOUT => $tracks->pushFailedConnection(),
+                is_array($response) => $tracks->push($response),
+                default => $tracks->pushResponse($response),
+            };
         }
         Http::fake(['*/sessions/new' => $sessions, '*/tracks/new' => $tracks]);
     }

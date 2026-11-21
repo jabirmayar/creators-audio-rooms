@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- SFU: when Cloudflare times out or answers with a server error, `POST /sfu/subscribe` no longer fails with a 500. It returns every requested speaker in `unavailable` and the browser tries again on a later check-in. A spare session is not replaced in the same request, which would make the listener wait for a second timeout.
+- SFU: a Cloudflare timeout or server error on other SFU calls (publishing a microphone, for example) is a `503` with error `sfu_unavailable` and is not written to the app's error log, since the SFU client already logs a warning. The browser retries as before.
+- Messages participants can see no longer name the vendor ("The audio connection is busy right now…" in place of "Cloudflare Realtime is temporarily unavailable…").
+
 ## 1.15.3 - 2026-11-18
 
 ### Fixed

@@ -3,6 +3,7 @@
 namespace daacreators\CreatorsAudioRooms\Http\Controllers;
 
 use daacreators\CreatorsAudioRooms\Exceptions\RoomActionDenied;
+use daacreators\CreatorsAudioRooms\Exceptions\SfuUnavailable;
 use daacreators\CreatorsAudioRooms\Http\Middleware\ResolveParticipant;
 use daacreators\CreatorsAudioRooms\Models\Member;
 use daacreators\CreatorsAudioRooms\Models\Room;
@@ -212,7 +213,7 @@ class RoomApiController extends Controller
         $created = $this->sfu->createSession();
         $sessionId = (string) ($created['sessionId'] ?? '');
         if ($sessionId === '') {
-            throw new \RuntimeException('Cloudflare Realtime did not return a publishing session.');
+            throw new \RuntimeException('The audio connection could not start the microphone.');
         }
         $published = $this->sfu->publish($sessionId, $data['session_description'], $data['mid']);
         $track = null;
@@ -223,7 +224,7 @@ class RoomApiController extends Controller
             }
         }
         if (! is_array($track) || empty($published['sessionDescription']['sdp'])) {
-            throw new \RuntimeException('Cloudflare Realtime could not publish this microphone.');
+            throw new \RuntimeException('The audio connection could not start the microphone.');
         }
 
         $member->forceFill([
@@ -296,22 +297,35 @@ class RoomApiController extends Controller
         if ($publishers->isEmpty()) {
             return response()->json(['session_id' => $sessionId !== '' ? $sessionId : null, 'subscriptions' => [], 'session_description' => null]);
         }
-        if ($sessionId === '') {
-            $sessionId = $this->newSfuReceiverSession();
-        }
         $publications = $publishers->map(fn ($publisher) => [
             'sessionId' => $publisher->sfu_publisher_session_id,
             'trackName' => 'audio',
         ])->all();
+        $live = $sessionId !== '' && ! $spare;
         try {
-            $response = $this->sfu->subscribe($sessionId, $publications);
-        } catch (\RuntimeException $e) {
-            if (! $spare) {
-                throw $e;
+            if ($sessionId === '') {
+                $sessionId = $this->newSfuReceiverSession();
             }
-            // A spare that sat unused may have expired on Cloudflare's side.
-            $sessionId = $this->newSfuReceiverSession();
-            $response = $this->sfu->subscribe($sessionId, $publications);
+            try {
+                $response = $this->sfu->subscribe($sessionId, $publications);
+            } catch (\RuntimeException $e) {
+                if (! $spare || $e instanceof SfuUnavailable) {
+                    throw $e;
+                }
+                // A spare that sat unused may have expired on Cloudflare's side.
+                $sessionId = $this->newSfuReceiverSession();
+                $response = $this->sfu->subscribe($sessionId, $publications);
+            }
+        } catch (SfuUnavailable) {
+            // Cloudflare timed out or failed for a moment: no speaker was handed over, so the browser asks
+            // again on a later check-in. A new or spare session may have half-taken the request and is not
+            // offered for reuse; a live one keeps the speakers it already has.
+            return response()->json([
+                'session_id' => $live ? $sessionId : null,
+                'subscriptions' => [],
+                'session_description' => null,
+                'unavailable' => $publishers->pluck('participant_key')->all(),
+            ]);
         }
         $subscriptions = [];
         $trackFailures = [];
@@ -399,7 +413,7 @@ class RoomApiController extends Controller
     {
         $sessionId = (string) ($this->sfu->createSession()['sessionId'] ?? '');
         if ($sessionId === '') {
-            throw new \RuntimeException('Cloudflare Realtime did not return a receiving session.');
+            throw new \RuntimeException('The audio connection could not start listening.');
         }
 
         return $sessionId;
